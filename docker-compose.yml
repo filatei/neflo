@@ -1,0 +1,61 @@
+# Neflo — isolated stack. Only the app port is published to the host;
+# Postgres has NO host port (reachable only inside the neflo-net network),
+# so it can't interfere with Otuburu or anything else on the box.
+#
+# Run from /opt/neflo/app:
+#   docker compose --env-file ../.env.ports --env-file ./.env up -d --build
+#
+# ../.env.ports provides APP_PORT, NEFLO_UID, NEFLO_GID (written by server-setup.sh)
+# ./.env provides app secrets (DATABASE_URL, GOOGLE_*, WALLET_MNEMONIC, ...)
+
+name: neflo
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neflo-app:latest
+    container_name: neflo-app
+    restart: unless-stopped
+    # Run as the host `neflo` user for correct volume ownership.
+    user: "${NEFLO_UID}:${NEFLO_GID}"
+    env_file:
+      - ./.env
+    environment:
+      # Talk to Postgres over the private network by service name.
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-neflo}:${POSTGRES_PASSWORD:-neflo}@postgres:5432/${POSTGRES_DB:-neflo}?schema=public"
+      PORT: "3000"
+    # Publish only on loopback; Apache terminates TLS and proxies to it.
+    ports:
+      - "127.0.0.1:${APP_PORT:-8090}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - neflo-net
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: neflo-postgres
+    restart: unless-stopped
+    user: "${NEFLO_UID}:${NEFLO_GID}"
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER:-neflo}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-neflo}"
+      POSTGRES_DB: "${POSTGRES_DB:-neflo}"
+    # No `ports:` — intentionally not exposed to the host.
+    volumes:
+      - /opt/neflo/data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-neflo} -d ${POSTGRES_DB:-neflo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - neflo-net
+
+networks:
+  neflo-net:
+    name: neflo-net
+    external: true

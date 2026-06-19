@@ -2,6 +2,8 @@
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Slim, self-contained server build for the Docker image.
+  output: "standalone",
   // Keep the client bundle lean for low-bandwidth villages.
   experimental: {
     serverActions: {
