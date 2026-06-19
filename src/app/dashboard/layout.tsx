@@ -1,8 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
-import { DashboardNav } from "@/components/DashboardNav";
-import { Logo } from "@/components/Logo";
+import { Sidebar } from "@/components/Sidebar";
 
 export default async function DashboardLayout({
   children,
@@ -12,33 +10,17 @@ export default async function DashboardLayout({
   const session = await auth();
   if (!session) redirect("/signin");
 
-  return (
-    <div className="min-h-dvh">
-      <header className="sticky top-0 z-30 border-b border-ink-100 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3">
-          <Link href="/dashboard">
-            <Logo size={22} />
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm font-semibold text-ink-500 sm:inline">
-              {session.user?.email}
-            </span>
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/" });
-              }}
-            >
-              <button className="btn-ghost text-sm">Sign out</button>
-            </form>
-          </div>
-        </div>
-        <div className="mx-auto max-w-5xl px-5">
-          <DashboardNav />
-        </div>
-      </header>
+  async function doSignOut() {
+    "use server";
+    await signOut({ redirectTo: "/" });
+  }
 
-      <main className="mx-auto max-w-5xl px-5 py-6 sm:py-8">{children}</main>
+  return (
+    <div className="min-h-dvh md:flex">
+      <Sidebar email={session.user?.email} signOutAction={doSignOut} />
+      <div className="min-w-0 flex-1">
+        <main className="mx-auto max-w-4xl px-5 py-6 sm:py-8">{children}</main>
+      </div>
     </div>
   );
 }
