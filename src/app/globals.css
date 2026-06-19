@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: #ffffff;
+  color: #0d0d0d;
+}
+
+/* Respect reduced motion / low-power devices common on village networks */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5
+      text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2
+      focus-visible:ring-black focus-visible:ring-offset-2 disabled:cursor-not-allowed
+      disabled:opacity-40;
+  }
+  .btn-primary {
+    @apply btn bg-black text-white hover:bg-ink-800 active:bg-ink-900;
+  }
+  .btn-secondary {
+    @apply btn border border-ink-200 bg-white text-black hover:bg-ink-50 active:bg-ink-100;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-ink-600 hover:bg-ink-50 hover:text-black;
+  }
+
+  .card {
+    @apply rounded-2xl border border-ink-100 bg-white p-5 shadow-card;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-ink-200 bg-white px-3.5 py-2.5 text-sm
+      font-medium text-black placeholder:text-ink-400 focus:border-black focus:outline-none
+      focus:ring-2 focus:ring-black/10;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-bold uppercase tracking-wide text-ink-500;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full border border-ink-200 px-2.5 py-0.5
+      text-xs font-bold text-ink-700;
+  }
+}

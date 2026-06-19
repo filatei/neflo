@@ -1,0 +1,297 @@
+// Neflo — stablecoin-first payments platform
+// Postgres + Prisma. Hosted on the same box as Otuburu.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// Auth (NextAuth / Auth.js Prisma adapter shape)
+// ----------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  isAdmin       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  accounts  Account[]
+  sessions  Session[]
+  merchants MerchantMember[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// Merchants (the "platforms" that receive payments)
+// ----------------------------------------------------------------------------
+
+model Merchant {
+  id              String   @id @default(cuid())
+  name            String
+  // Settlement currency code, e.g. NGN
+  settlementCcy   String   @default("NGN")
+  // KYB / activation gate
+  status          MerchantStatus @default(PENDING)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members          MerchantMember[]
+  apiKeys          ApiKey[]
+  depositAddresses DepositAddress[]
+  deposits         StablecoinDeposit[]
+  conversions      Conversion[]
+  ledgerEntries    LedgerEntry[]
+  webhooks         WebhookEndpoint[]
+  balances         MerchantBalance[]
+
+  @@map("merchants")
+}
+
+enum MerchantStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
+model MerchantMember {
+  id         String       @id @default(cuid())
+  merchantId String
+  userId     String
+  role       MemberRole   @default(OWNER)
+  createdAt  DateTime     @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, userId])
+  @@map("merchant_members")
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  DEVELOPER
+  VIEWER
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  merchantId String
+  label      String
+  // We store only a hash of the secret; the prefix is shown for identification.
+  prefix     String
+  hash       String
+  mode       ApiMode  @default(TEST)
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("api_keys")
+}
+
+enum ApiMode {
+  TEST
+  LIVE
+}
+
+// ----------------------------------------------------------------------------
+// Stablecoin rails
+// ----------------------------------------------------------------------------
+
+enum Chain {
+  TRON
+  ETHEREUM
+  POLYGON
+}
+
+enum Asset {
+  USDT
+  USDC
+}
+
+// A per-merchant, per-chain HD-derived deposit address.
+model DepositAddress {
+  id           String   @id @default(cuid())
+  merchantId   String
+  chain        Chain
+  address      String
+  // BIP44 derivation index used to derive this address from the master seed.
+  derivationIx Int
+  label        String?
+  createdAt    DateTime @default(now())
+
+  merchant Merchant            @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  deposits StablecoinDeposit[]
+
+  @@unique([chain, address])
+  @@unique([chain, derivationIx])
+  @@index([merchantId])
+  @@map("deposit_addresses")
+}
+
+model StablecoinDeposit {
+  id            String        @id @default(cuid())
+  merchantId    String
+  addressId     String
+  chain         Chain
+  asset         Asset
+  // On-chain tx hash; unique so the monitor is idempotent.
+  txHash        String
+  fromAddress   String?
+  // Amount of the stablecoin (6 dp for USDT/USDC) stored as string-decimal.
+  amount        Decimal       @db.Decimal(38, 6)
+  confirmations Int           @default(0)
+  status        DepositStatus @default(DETECTED)
+  detectedAt    DateTime      @default(now())
+  confirmedAt   DateTime?
+
+  merchant   Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  address    DepositAddress @relation(fields: [addressId], references: [id], onDelete: Cascade)
+  conversion Conversion?
+
+  @@unique([chain, txHash])
+  @@index([merchantId])
+  @@index([status])
+  @@map("stablecoin_deposits")
+}
+
+enum DepositStatus {
+  DETECTED
+  CONFIRMED
+  CREDITED
+  FAILED
+}
+
+// USD-stablecoin -> local currency conversion applied when a deposit is credited.
+model Conversion {
+  id            String   @id @default(cuid())
+  merchantId    String
+  depositId     String   @unique
+  asset         Asset
+  usdAmount     Decimal  @db.Decimal(38, 6)
+  // Mid-market USD->local rate used
+  rate          Decimal  @db.Decimal(38, 6)
+  spreadBps     Int
+  // Net local-currency amount credited after spread
+  localCcy      String
+  localAmount   Decimal  @db.Decimal(38, 2)
+  createdAt     DateTime @default(now())
+
+  merchant Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  deposit  StablecoinDeposit @relation(fields: [depositId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("conversions")
+}
+
+// Double-entry-friendly ledger. Each credit/debit is one row.
+model LedgerEntry {
+  id          String       @id @default(cuid())
+  merchantId  String
+  ccy         String
+  // Positive = credit, negative = debit, minor units (kobo for NGN)
+  amountMinor BigInt
+  kind        LedgerKind
+  reference   String?
+  createdAt   DateTime     @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("ledger_entries")
+}
+
+enum LedgerKind {
+  DEPOSIT_CREDIT
+  CONVERSION_SPREAD
+  PAYOUT_DEBIT
+  ADJUSTMENT
+}
+
+// Cached running balance per merchant per currency (derived from the ledger).
+model MerchantBalance {
+  id            String   @id @default(cuid())
+  merchantId    String
+  ccy           String
+  availableMinor BigInt  @default(0)
+  updatedAt     DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, ccy])
+  @@map("merchant_balances")
+}
+
+model WebhookEndpoint {
+  id         String   @id @default(cuid())
+  merchantId String
+  url        String
+  secret     String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("webhook_endpoints")
+}
+
+// Singleton-ish cursor so the monitor can resume scanning per chain.
+model MonitorCursor {
+  chain        Chain    @id
+  lastBlock    BigInt   @default(0)
+  lastScanAt   DateTime @default(now())
+
+  @@map("monitor_cursors")
+}
