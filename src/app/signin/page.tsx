@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth, signIn } from "@/auth";
+import { Logo } from "@/components/Logo";
 
 export default async function SignInPage() {
   const session = await auth();
@@ -8,7 +9,7 @@ export default async function SignInPage() {
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6">
       <div className="card">
-        <span className="text-xl font-extrabold tracking-tight">Neflo</span>
+        <Logo size={24} />
         <h1 className="mt-6 text-2xl font-bold tracking-tight">Sign in</h1>
         <p className="mt-1 text-sm font-medium text-ink-500">
           Continue with your Google account to access your dashboard.

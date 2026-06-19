@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/auth";
 import { DashboardNav } from "@/components/DashboardNav";
+import { Logo } from "@/components/Logo";
 
 export default async function DashboardLayout({
   children,
@@ -15,8 +16,8 @@ export default async function DashboardLayout({
     <div className="min-h-dvh">
       <header className="sticky top-0 z-30 border-b border-ink-100 bg-white/90 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-5 py-3">
-          <Link href="/dashboard" className="text-lg font-extrabold tracking-tight">
-            Neflo
+          <Link href="/dashboard">
+            <Logo size={22} />
           </Link>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm font-semibold text-ink-500 sm:inline">

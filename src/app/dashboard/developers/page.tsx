@@ -46,6 +46,27 @@ export default async function DevelopersPage() {
           createdAt: w.createdAt.toISOString(),
         }))}
       />
+
+      <details className="card">
+        <summary className="cursor-pointer text-sm font-bold">API reference</summary>
+        <p className="mt-3 text-sm font-medium text-ink-500">
+          Base URL <code className="font-mono">{process.env.APP_URL ?? "https://neflo.torama.money"}/api/v1</code>.
+          Authenticate with your secret key:{" "}
+          <code className="font-mono">Authorization: Bearer nf_live_…</code>
+        </p>
+        <pre className="mt-3 overflow-x-auto rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-3 font-mono text-xs">
+{`# Create a charge -> returns a checkout_url to share
+curl -X POST ${process.env.APP_URL ?? "https://neflo.torama.money"}/api/v1/charges \\
+  -H "Authorization: Bearer nf_live_xxx" \\
+  -H "Content-Type: application/json" \\
+  -d '{"amount_usd": 50, "description": "Order #1234"}'
+
+GET  /api/v1/charges          # list charges
+GET  /api/v1/charges/:id      # fetch one
+GET  /api/v1/balance          # balances per currency
+GET  /api/v1/transactions     # received payments (crypto + transfer)`}
+        </pre>
+      </details>
     </div>
   );
 }

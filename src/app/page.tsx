@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/auth";
+import { Logo } from "@/components/Logo";
 
 export default async function HomePage() {
   const session = await auth();
@@ -7,7 +8,7 @@ export default async function HomePage() {
   return (
     <main className="mx-auto max-w-5xl px-5 py-10 sm:py-16">
       <header className="flex items-center justify-between">
-        <span className="text-xl font-extrabold tracking-tight">Neflo</span>
+        <Logo size={24} />
         <nav className="flex items-center gap-2">
           {session ? (
             <Link href="/dashboard" className="btn-primary">

@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { CheckoutClient } from "@/components/CheckoutClient";
+import { Logo } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,8 @@ export default async function CheckoutPage({
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-8">
-      <div className="mb-5 text-center">
-        <span className="text-xl font-extrabold tracking-tight">Neflo</span>
+      <div className="mb-5 flex justify-center">
+        <Logo size={24} />
       </div>
       <CheckoutClient
         id={charge.id}
