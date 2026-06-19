@@ -25,8 +25,28 @@ export type InboundTransfer = {
   amountKobo: bigint;
 };
 
+export type Bank = { name: string; code: string };
+
+export type ResolvedAccount = { accountName: string };
+
+export type SendTransferParams = {
+  amountKobo: bigint;
+  bankCode: string;
+  accountNumber: string;
+  accountName: string;
+  reference: string;
+};
+
+export type TransferResult = {
+  providerRef: string;
+  status: "PAID" | "PROCESSING" | "FAILED";
+  failureReason?: string;
+};
+
 export interface NgnRail {
   readonly name: string;
+
+  // --- collections (pay-in) ---
   createVirtualAccount(
     params: CreateVirtualAccountParams,
   ): Promise<VirtualAccountResult>;
@@ -34,4 +54,12 @@ export interface NgnRail {
   verifySignature(rawBody: string, signature: string | null): boolean;
   /** Normalise a provider webhook body into an InboundTransfer (or null). */
   parseInbound(body: unknown): InboundTransfer | null;
+
+  // --- payouts (pay-out) ---
+  listBanks(): Promise<Bank[]>;
+  resolveAccount(
+    bankCode: string,
+    accountNumber: string,
+  ): Promise<ResolvedAccount>;
+  sendTransfer(params: SendTransferParams): Promise<TransferResult>;
 }

@@ -19,7 +19,10 @@ const SECTIONS: Section[] = [
   },
   {
     label: "Money",
-    items: [{ href: "/dashboard/transactions", label: "Transactions" }],
+    items: [
+      { href: "/dashboard/transactions", label: "Transactions" },
+      { href: "/dashboard/payouts", label: "Payouts" },
+    ],
   },
   {
     label: "Developers",

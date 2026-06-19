@@ -92,6 +92,7 @@ model Merchant {
   webhooks         WebhookEndpoint[]
   balances         MerchantBalance[]
   charges          Charge[]
+  payouts          Payout[]
 
   @@map("merchants")
 }
@@ -396,6 +397,35 @@ model WebhookDelivery {
 enum WebhookDeliveryStatus {
   PENDING
   SUCCESS
+  FAILED
+}
+
+// A merchant withdrawal of NGN balance to a bank account.
+model Payout {
+  id            String       @id @default(cuid())
+  merchantId    String
+  amountKobo    BigInt
+  bankCode      String
+  accountNumber String
+  accountName   String
+  provider      String
+  reference     String       @unique
+  providerRef   String?
+  status        PayoutStatus @default(PENDING)
+  failureReason String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@map("payouts")
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  PAID
   FAILED
 }
 
