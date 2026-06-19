@@ -28,6 +28,12 @@ export async function POST(req: Request) {
   if (!merchant) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
+  if (merchant.status !== "ACTIVE") {
+    return NextResponse.json(
+      { error: "kyb_required", message: "Complete business verification to withdraw" },
+      { status: 403 },
+    );
+  }
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid input" }, { status: 400 });

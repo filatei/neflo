@@ -80,6 +80,20 @@ model Merchant {
   settlementCcy   String   @default("NGN")
   // KYB / activation gate
   status          MerchantStatus @default(PENDING)
+
+  // --- KYB / business profile ---
+  legalName               String?
+  registrationNumber      String?
+  businessType            String?
+  country                 String?  @default("NG")
+  phone                   String?
+  website                 String?
+  address                 String?
+  settlementBankCode      String?
+  settlementAccountNumber String?
+  settlementAccountName   String?
+  kybSubmittedAt          DateTime?
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

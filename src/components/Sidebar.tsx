@@ -28,17 +28,30 @@ const SECTIONS: Section[] = [
     label: "Developers",
     items: [{ href: "/dashboard/developers", label: "Developers" }],
   },
+  {
+    label: "Account",
+    items: [{ href: "/dashboard/settings", label: "Settings" }],
+  },
 ];
 
 export function Sidebar({
   email,
+  isAdmin,
   signOutAction,
 }: {
   email?: string | null;
+  isAdmin?: boolean;
   signOutAction: () => void;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+
+  const sections = isAdmin
+    ? [
+        ...SECTIONS,
+        { label: "Admin", items: [{ href: "/dashboard/admin", label: "Merchants" }] },
+      ]
+    : SECTIONS;
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -59,7 +72,7 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 space-y-6 overflow-y-auto px-3 pb-4">
-        {SECTIONS.map((section, i) => (
+        {sections.map((section, i) => (
           <div key={i}>
             {section.label && (
               <p className="px-3 pb-1.5 text-[10px] font-bold uppercase tracking-wider text-ink-400">

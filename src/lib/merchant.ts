@@ -17,12 +17,12 @@ export async function getCurrentMerchant() {
   });
   if (membership) return membership.merchant;
 
-  // Bootstrap a merchant for this user.
+  // Bootstrap a merchant for this user (PENDING until KYB is approved).
   const name = session.user?.name ?? session.user?.email ?? "My platform";
   const merchant = await prisma.merchant.create({
     data: {
       name: `${name}`,
-      status: "ACTIVE",
+      status: "PENDING",
       members: { create: { userId, role: "OWNER" } },
     },
   });
@@ -33,4 +33,9 @@ export async function requireMerchant() {
   const merchant = await getCurrentMerchant();
   if (!merchant) throw new Error("UNAUTHENTICATED");
   return merchant;
+}
+
+/** True once a merchant is verified and may accept/move live money. */
+export function isActive(merchant: { status: string }) {
+  return merchant.status === "ACTIVE";
 }

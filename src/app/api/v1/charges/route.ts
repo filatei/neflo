@@ -23,6 +23,12 @@ const createSchema = z.object({
 export async function POST(req: Request) {
   const auth = await authenticateApiKey(req);
   if (!auth) return unauthorized();
+  if (auth.merchant.status !== "ACTIVE") {
+    return NextResponse.json(
+      { error: "kyb_required", message: "Complete business verification to accept payments" },
+      { status: 403 },
+    );
+  }
 
   const parsed = createSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
