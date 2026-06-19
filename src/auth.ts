@@ -15,6 +15,8 @@ const adminEmails = (process.env.ADMIN_EMAILS ?? "")
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  // Read the secret under either env name (v5 prefers AUTH_SECRET).
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   session: { strategy: "jwt" },
   trustHost: true,
   pages: {
