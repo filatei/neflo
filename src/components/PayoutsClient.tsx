@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { useToast } from "@/components/ui/Toast";
+import { BankSelect } from "@/components/BankSelect";
 
 type Payout = {
   id: string;
@@ -184,25 +185,15 @@ export function PayoutsClient({
       >
         <div className="space-y-4">
           <div>
-            <label className="label" htmlFor="bank">
-              Bank
-            </label>
-            <select
-              id="bank"
-              className="input"
+            <label className="label">Bank</label>
+            <BankSelect
+              banks={banks}
               value={bankCode}
-              onChange={(e) => {
-                setBankCode(e.target.value);
-                resolve(e.target.value, accountNumber);
+              onChange={(code) => {
+                setBankCode(code);
+                resolve(code, accountNumber);
               }}
-            >
-              <option value="">Select bank</option>
-              {banks.map((b) => (
-                <option key={b.code} value={b.code}>
-                  {b.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div>
             <label className="label" htmlFor="acct">

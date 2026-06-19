@@ -1,4 +1,5 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
+import { NIGERIA_BANKS } from "../ng-banks";
 import type {
   Bank,
   CheckoutInit,
@@ -245,18 +246,7 @@ export class SquadRail implements NgnRail {
   }
 }
 
-const MOCK_BANKS: Bank[] = [
-  { name: "Guaranty Trust Bank", code: "058" },
-  { name: "Access Bank", code: "044" },
-  { name: "Zenith Bank", code: "057" },
-  { name: "United Bank for Africa", code: "033" },
-  { name: "First Bank of Nigeria", code: "011" },
-  { name: "Wema Bank (ALAT)", code: "035" },
-  { name: "Providus Bank", code: "101" },
-  { name: "Kuda Microfinance Bank", code: "50211" },
-  { name: "OPay", code: "999992" },
-  { name: "Moniepoint MFB", code: "50515" },
-];
+const MOCK_BANKS: Bank[] = NIGERIA_BANKS;
 
 type SquadVaData = {
   virtual_account_number?: string;

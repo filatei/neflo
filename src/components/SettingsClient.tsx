@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useToast } from "@/components/ui/Toast";
+import { BankSelect } from "@/components/BankSelect";
 
 type Bank = { name: string; code: string };
 
@@ -97,19 +98,14 @@ export function SettingsClient({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="label">Bank</label>
-            <select
-              className="input"
+            <BankSelect
+              banks={banks}
               value={p.settlementBankCode}
-              onChange={(e) => {
-                set("settlementBankCode", e.target.value);
-                resolve(e.target.value, p.settlementAccountNumber);
+              onChange={(code) => {
+                set("settlementBankCode", code);
+                resolve(code, p.settlementAccountNumber);
               }}
-            >
-              <option value="">Select bank</option>
-              {banks.map((b) => (
-                <option key={b.code} value={b.code}>{b.name}</option>
-              ))}
-            </select>
+            />
           </div>
           <div>
             <label className="label">Account number</label>
