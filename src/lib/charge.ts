@@ -38,11 +38,19 @@ export async function recomputeChargeStatus(chargeId: string) {
   const charge = await prisma.charge.findUnique({ where: { id: chargeId } });
   if (!charge) return;
 
-  const agg = await prisma.stablecoinDeposit.aggregate({
-    where: { address: { chargeId }, status: "CREDITED" },
-    _sum: { amount: true },
-  });
-  const paid = Number(agg._sum.amount ?? 0);
+  const [stableAgg, ngnAgg] = await Promise.all([
+    prisma.stablecoinDeposit.aggregate({
+      where: { address: { chargeId }, status: "CREDITED" },
+      _sum: { amount: true },
+    }),
+    prisma.ngnPayment.aggregate({
+      where: { chargeId },
+      _sum: { usdAmount: true },
+    }),
+  ]);
+  // Total received in USD terms: on-chain stablecoins + NGN transfers (USD-equiv).
+  const paid =
+    Number(stableAgg._sum.amount ?? 0) + Number(ngnAgg._sum.usdAmount ?? 0);
   const expected = Number(charge.amountUsd);
 
   // 1-cent tolerance for rounding.

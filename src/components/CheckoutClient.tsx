@@ -31,11 +31,46 @@ export function CheckoutClient({
   const { success, error } = useToast();
   const [status, setStatus] = useState<Status>(initialStatus);
   const [paidUsd, setPaidUsd] = useState(0);
+  const [method, setMethod] = useState<"crypto" | "ngn">("crypto");
   const [chain, setChain] = useState<Chain | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [ngn, setNgn] = useState<{
+    accountNumber: string;
+    bankName: string;
+    accountName: string;
+    amountNgn: number;
+  } | null>(null);
+  const [ngnLoading, setNgnLoading] = useState(false);
+
+  async function startBankTransfer() {
+    setNgnLoading(true);
+    try {
+      const res = await fetch(`/api/pay/${id}/virtual-account`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not start transfer");
+      setNgn(data);
+    } catch (e) {
+      error((e as Error).message);
+    } finally {
+      setNgnLoading(false);
+    }
+  }
+
+  async function copyText(text: string, label: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      success(`${label} copied`);
+    } catch {
+      error("Couldn't copy");
+    }
+  }
 
   // Poll for payment while the charge is open.
   const poll = useCallback(async () => {
@@ -135,67 +170,167 @@ export function CheckoutClient({
       {description && (
         <p className="mt-1 text-sm font-medium text-ink-500">{description}</p>
       )}
-      <p className="mt-3 text-xs font-medium text-ink-400">
-        Pay with USDT or USDC. {status === "UNDERPAID" &&
-          `Received $${paidUsd.toFixed(2)} so far — send the remainder.`}
-      </p>
-
-      <div className="mt-5">
-        <p className="label">Choose network</p>
-        <div className="grid grid-cols-3 gap-2">
-          {CHAINS.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => pickChain(c.id)}
-              className={
-                "rounded-xl border px-2 py-2.5 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 " +
-                (chain === c.id
-                  ? "border-black bg-ink-50"
-                  : "border-ink-200 hover:bg-ink-50")
-              }
-            >
-              <span className="block text-sm font-bold">{c.label}</span>
-              <span className="block text-[10px] font-medium text-ink-400">
-                {c.std}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {loading && (
-        <p className="mt-6 text-center text-sm font-semibold text-ink-400">
-          Generating address…
+      {status === "UNDERPAID" && (
+        <p className="mt-3 text-xs font-medium text-ink-400">
+          Received ${paidUsd.toFixed(2)} so far — send the remainder.
         </p>
       )}
 
-      {address && !loading && (
-        <div className="mt-5 flex flex-col items-center text-center">
-          {qr && (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={qr}
-              alt="Payment address QR"
-              width={200}
-              height={200}
-              className="rounded-xl border border-ink-100"
-            />
-          )}
-          <p className="mt-3 break-all font-mono text-xs font-semibold">
-            {address}
-          </p>
-          <button onClick={copy} className="btn-secondary mt-3">
-            {copied ? "Copied ✓" : "Copy address"}
+      {/* Method toggle */}
+      <div className="mt-5 grid grid-cols-2 gap-2">
+        {(
+          [
+            ["crypto", "Crypto (USDT/USDC)"],
+            ["ngn", "Bank transfer (₦)"],
+          ] as const
+        ).map(([m, label]) => (
+          <button
+            key={m}
+            onClick={() => setMethod(m)}
+            className={
+              "rounded-xl border px-3 py-2.5 text-sm font-bold transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 " +
+              (method === m
+                ? "border-black bg-ink-50"
+                : "border-ink-200 hover:bg-ink-50")
+            }
+          >
+            {label}
           </button>
-          <p className="mt-3 flex items-center gap-2 text-xs font-medium text-ink-400">
-            <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-400" />
-            Waiting for payment…
-          </p>
-          <p className="mt-1 text-[11px] font-medium text-ink-400">
-            Send exactly {amount} of {chain === "TRON" ? "TRC20" : "ERC20"} USDT
-            or USDC to this address.
-          </p>
+        ))}
+      </div>
+
+      {method === "crypto" && (
+        <>
+          <div className="mt-5">
+            <p className="label">Choose network</p>
+            <div className="grid grid-cols-3 gap-2">
+              {CHAINS.map((c) => (
+                <button
+                  key={c.id}
+                  onClick={() => pickChain(c.id)}
+                  className={
+                    "rounded-xl border px-2 py-2.5 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 " +
+                    (chain === c.id
+                      ? "border-black bg-ink-50"
+                      : "border-ink-200 hover:bg-ink-50")
+                  }
+                >
+                  <span className="block text-sm font-bold">{c.label}</span>
+                  <span className="block text-[10px] font-medium text-ink-400">
+                    {c.std}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loading && (
+            <p className="mt-6 text-center text-sm font-semibold text-ink-400">
+              Generating address…
+            </p>
+          )}
+
+          {address && !loading && (
+            <div className="mt-5 flex flex-col items-center text-center">
+              {qr && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={qr}
+                  alt="Payment address QR"
+                  width={200}
+                  height={200}
+                  className="rounded-xl border border-ink-100"
+                />
+              )}
+              <p className="mt-3 break-all font-mono text-xs font-semibold">
+                {address}
+              </p>
+              <button onClick={copy} className="btn-secondary mt-3">
+                {copied ? "Copied ✓" : "Copy address"}
+              </button>
+              <p className="mt-3 flex items-center gap-2 text-xs font-medium text-ink-400">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-400" />
+                Waiting for payment…
+              </p>
+              <p className="mt-1 text-[11px] font-medium text-ink-400">
+                Send exactly {amount} of {chain === "TRON" ? "TRC20" : "ERC20"}{" "}
+                USDT or USDC to this address.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {method === "ngn" && (
+        <div className="mt-5">
+          {!ngn ? (
+            <button
+              onClick={startBankTransfer}
+              className="btn-primary w-full"
+              disabled={ngnLoading}
+            >
+              {ngnLoading ? "Getting account…" : "Show bank account"}
+            </button>
+          ) : (
+            <div className="space-y-3">
+              <Field
+                label="Bank"
+                value={ngn.bankName}
+                onCopy={() => copyText(ngn.bankName, "Bank")}
+              />
+              <Field
+                label="Account number"
+                value={ngn.accountNumber}
+                mono
+                onCopy={() => copyText(ngn.accountNumber, "Account number")}
+              />
+              <Field label="Account name" value={ngn.accountName} />
+              <Field
+                label="Amount"
+                value={`₦${ngn.amountNgn.toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                })}`}
+                onCopy={() =>
+                  copyText(ngn.amountNgn.toFixed(2), "Amount")
+                }
+              />
+              <p className="flex items-center gap-2 pt-1 text-xs font-medium text-ink-400">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-ink-400" />
+                Waiting for your transfer…
+              </p>
+            </div>
+          )}
         </div>
+      )}
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  mono,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  onCopy?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl border border-ink-100 px-3.5 py-2.5">
+      <div className="min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-wide text-ink-400">
+          {label}
+        </p>
+        <p className={"truncate text-sm font-bold " + (mono ? "font-mono" : "")}>
+          {value}
+        </p>
+      </div>
+      {onCopy && (
+        <button className="btn-ghost px-2 py-1 text-xs" onClick={onCopy}>
+          Copy
+        </button>
       )}
     </div>
   );

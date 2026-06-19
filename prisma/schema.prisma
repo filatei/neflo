@@ -202,12 +202,56 @@ model Charge {
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
-  merchant  Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
-  addresses DepositAddress[]
+  merchant    Merchant            @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  addresses   DepositAddress[]
+  ngnAccounts NgnVirtualAccount[]
+  ngnPayments NgnPayment[]
 
   @@index([merchantId])
   @@index([status])
   @@map("charges")
+}
+
+// A dynamic bank virtual account issued for a single charge (NGN rail).
+model NgnVirtualAccount {
+  id            String   @id @default(cuid())
+  chargeId      String
+  merchantId    String
+  provider      String // "squad" | "mock"
+  accountNumber String
+  bankName      String
+  accountName   String
+  // Provider's reference / customer identifier we created the account with.
+  providerRef   String   @unique
+  amountKobo    BigInt
+  createdAt     DateTime @default(now())
+
+  charge   Charge       @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  payments NgnPayment[]
+
+  @@index([chargeId])
+  @@map("ngn_virtual_accounts")
+}
+
+// A received NGN transfer into a charge's virtual account.
+model NgnPayment {
+  id               String   @id @default(cuid())
+  virtualAccountId String
+  chargeId         String
+  merchantId       String
+  provider         String
+  // Provider's unique transaction reference — idempotency key.
+  transactionRef   String   @unique
+  amountKobo       BigInt
+  // USD-equivalent at credit time (for the charge's USD-based total).
+  usdAmount        Decimal  @db.Decimal(38, 6)
+  createdAt        DateTime @default(now())
+
+  virtualAccount NgnVirtualAccount @relation(fields: [virtualAccountId], references: [id], onDelete: Cascade)
+  charge         Charge            @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+
+  @@index([chargeId])
+  @@map("ngn_payments")
 }
 
 enum ChargeStatus {
