@@ -32,10 +32,13 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [logOpen, setLogOpen] = useState(false);
   const [logLoading, setLogLoading] = useState(false);
+  const [logEndpointId, setLogEndpointId] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   async function openLog(id: string) {
     setLogOpen(true);
+    setLogEndpointId(id);
     setLogLoading(true);
     setDeliveries([]);
     try {
@@ -47,6 +50,24 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
       error((e as Error).message);
     } finally {
       setLogLoading(false);
+    }
+  }
+
+  async function resend(deliveryId: string) {
+    setResendingId(deliveryId);
+    try {
+      const res = await fetch(
+        `/api/merchant/webhook-deliveries/${deliveryId}/resend`,
+        { method: "POST" },
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Resend failed");
+      success(data.status === "SUCCESS" ? "Delivered" : "Retried");
+      if (logEndpointId) await openLog(logEndpointId);
+    } catch (e) {
+      error((e as Error).message);
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -180,6 +201,38 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
         )}
       </div>
 
+      <details className="card">
+        <summary className="cursor-pointer text-sm font-bold">
+          Verifying webhook signatures
+        </summary>
+        <p className="mt-3 text-sm font-medium text-ink-500">
+          Each request carries <code className="font-mono">X-Neflo-Event</code>,{" "}
+          <code className="font-mono">X-Neflo-Delivery</code>, and{" "}
+          <code className="font-mono">X-Neflo-Signature</code> — a hex
+          HMAC-SHA256 of the raw body keyed by this endpoint&apos;s signing
+          secret. Compare it before trusting the payload:
+        </p>
+        <pre className="mt-3 overflow-x-auto rounded-xl border border-ink-200 bg-ink-50 px-3.5 py-3 font-mono text-xs">
+{`import crypto from "crypto";
+
+// Express: use express.raw({ type: "application/json" })
+const sig = req.headers["x-neflo-signature"];
+const expected = crypto
+  .createHmac("sha256", WHSEC)        // your signing secret
+  .update(req.body)                    // the RAW request body
+  .digest("hex");
+
+if (crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+  const { event, data } = JSON.parse(req.body);
+  // e.g. event === "charge.paid"
+}`}
+        </pre>
+        <p className="mt-3 text-xs font-medium text-ink-400">
+          Return a 2xx to acknowledge. Non-2xx or timeouts are retried
+          automatically (1m, 5m, 30m, 2h, 6h), or resend manually from the log.
+        </p>
+      </details>
+
       <Modal
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -251,12 +304,23 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
                   {d.responseStatus != null && ` · HTTP ${d.responseStatus}`}
                   {d.lastError && ` · ${d.lastError}`}
                 </p>
-                <p className="text-[11px] font-medium text-ink-400">
-                  {new Date(d.createdAt).toLocaleString()}
-                  {d.status === "PENDING" &&
-                    d.nextRetryAt &&
-                    ` · retry ${new Date(d.nextRetryAt).toLocaleTimeString()}`}
-                </p>
+                <div className="mt-1 flex items-center justify-between gap-2">
+                  <p className="text-[11px] font-medium text-ink-400">
+                    {new Date(d.createdAt).toLocaleString()}
+                    {d.status === "PENDING" &&
+                      d.nextRetryAt &&
+                      ` · retry ${new Date(d.nextRetryAt).toLocaleTimeString()}`}
+                  </p>
+                  {d.status !== "SUCCESS" && (
+                    <button
+                      className="btn-ghost px-2 py-1 text-[11px]"
+                      onClick={() => resend(d.id)}
+                      disabled={resendingId === d.id}
+                    >
+                      {resendingId === d.id ? "Sending…" : "Resend"}
+                    </button>
+                  )}
+                </div>
               </li>
             ))}
           </ul>

@@ -110,6 +110,11 @@ async function attemptDelivery(deliveryId: string) {
   });
 }
 
+/** Manually re-attempt a single delivery (merchant-triggered "Resend"). */
+export async function resendDelivery(deliveryId: string) {
+  await attemptDelivery(deliveryId);
+}
+
 /**
  * Retry deliveries that are due. Called from the scan timer each cycle.
  * Returns the number of deliveries retried.
