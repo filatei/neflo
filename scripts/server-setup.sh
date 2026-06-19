@@ -101,6 +101,18 @@ main() {
     echo "  added ${ADMIN_USER} to ${APP_GROUP} group (re-login to take effect)"
   fi
 
+  log "==> 4b/6  Scoped passwordless sudo for ${ADMIN_USER} (CI deploy)"
+  # Lets the deploy workflow chown the app dir and reload Apache without a TTY.
+  SUDOERS_FILE="/etc/sudoers.d/neflo-deploy"
+  sudo tee "$SUDOERS_FILE" >/dev/null <<EOF
+${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/chown -R neflo\\:neflo /opt/neflo/app
+${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/chown -R neflo\\:neflo /opt/neflo
+${ADMIN_USER} ALL=(root) NOPASSWD: /usr/sbin/a2ensite neflo.torama.money
+${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reload apache2
+EOF
+  sudo chmod 0440 "$SUDOERS_FILE"
+  sudo visudo -cf "$SUDOERS_FILE" >/dev/null && echo "  ${SUDOERS_FILE} valid"
+
   log "==> 5/6  Isolated Docker network '${DOCKER_NET}'"
   if ! docker network inspect "$DOCKER_NET" >/dev/null 2>&1; then
     docker network create "$DOCKER_NET" >/dev/null

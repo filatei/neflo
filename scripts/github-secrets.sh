@@ -63,11 +63,11 @@ set_secret MIN_CONFIRMATIONS "12"
 set_secret USD_TO_NGN_RATE      "1600"
 set_secret CONVERSION_SPREAD_BPS "150"
 
-# --- Deploy (uncomment + fill when a deploy workflow lands, mirrors Otuburu) ---
-# set_secret LINODE_HOST    "dummy.host"
-# set_secret LINODE_USER    "user1"
-# set_secret LINODE_SSH_PORT "22"
-# set_secret LINODE_SSH_KEY "dummy-private-key"
-# set_secret GHCR_TOKEN     "dummy-ghcr-token"
+# --- Deploy (used by .github/workflows/deploy.yml; pull real values from Otuburu) ---
+set_secret LINODE_HOST     "neflo.torama.money"
+set_secret LINODE_USER     "user1"
+set_secret LINODE_SSH_PORT "22"
+set_secret LINODE_SSH_KEY  "dummy-private-key"
+set_secret GHCR_TOKEN      ""
 
 echo "Done. Review with:  gh secret list --repo ${REPO}"

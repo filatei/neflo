@@ -12,10 +12,12 @@ name: neflo
 
 services:
   app:
+    # CI pushes this image to GHCR; the server pulls it (no on-box builds).
+    # Local/manual use: `docker compose up -d --build` builds it from source.
+    image: "ghcr.io/filatei/neflo-app:${IMAGE_TAG:-latest}"
     build:
       context: .
       dockerfile: Dockerfile
-    image: neflo-app:latest
     container_name: neflo-app
     restart: unless-stopped
     # Run as the host `neflo` user for correct volume ownership.
