@@ -34,13 +34,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
     Nodemailer({
+      // Sending goes through our shared mailer (IP-trusted Google relay), so
+      // this server block is only a formal requirement of the provider.
       server: {
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT ?? 465),
-        secure: (process.env.SMTP_SECURE ?? "true") === "true",
-        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+        host: process.env.SMTP_HOST ?? "smtp-relay.gmail.com",
+        port: Number(process.env.SMTP_PORT ?? 587),
+        secure: (process.env.SMTP_SECURE ?? "false") === "true",
       },
-      from: process.env.SMTP_FROM,
+      from: process.env.SMTP_FROM ?? "Neflo <no-reply@torama.money>",
       // Brand the email with our monochrome shell via the shared mailer.
       sendVerificationRequest: async ({ identifier, url }) => {
         await sendMagicLinkEmail(identifier, url);

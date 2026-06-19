@@ -9,14 +9,18 @@ let cached: nodemailer.Transporter | null = null;
 
 function transport() {
   if (cached) return cached;
+  // Google Workspace SMTP relay authenticates by server IP, so we only send
+  // credentials if a password is actually configured. Without SMTP_PASS the
+  // relay is used purely on IP trust (smtp-relay.gmail.com:587, STARTTLS).
+  const auth =
+    process.env.SMTP_USER && process.env.SMTP_PASS
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined;
   cached = nodemailer.createTransport({
-    host: process.env.SMTP_HOST ?? "smtp.gmail.com",
-    port: Number(process.env.SMTP_PORT ?? 465),
-    secure: (process.env.SMTP_SECURE ?? "true") === "true",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
+    host: process.env.SMTP_HOST ?? "smtp-relay.gmail.com",
+    port: Number(process.env.SMTP_PORT ?? 587),
+    secure: (process.env.SMTP_SECURE ?? "false") === "true",
+    ...(auth ? { auth } : {}),
   });
   return cached;
 }
@@ -29,7 +33,7 @@ export async function sendMail(opts: {
   html: string;
   text?: string;
 }) {
-  if (!process.env.SMTP_USER) {
+  if (!process.env.SMTP_HOST) {
     // In dev without SMTP configured, log instead of throwing.
     console.warn("[mailer] SMTP not configured — skipping email to", opts.to);
     return { skipped: true };
