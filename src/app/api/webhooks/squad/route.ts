@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 import { getNgnRail } from "@/lib/rails";
 import { creditNgnTransfer, creditCardPayment } from "@/lib/ngn";
 import { markPayoutStatus } from "@/lib/payout";
@@ -55,31 +56,35 @@ export async function POST(req: Request) {
   }
 
   // Card / USSD gateway success references our `cg_<chargeId>_<rand>`.
+  // We don't trust the webhook body: confirm server-side and credit the amount
+  // we recorded at initiation.
   if (typeof ref === "string" && ref.startsWith("cg_")) {
-    const status = String(
-      (payload as Record<string, unknown>).transaction_status ??
-        (payload as Record<string, unknown>).status ??
-        "",
-    ).toLowerCase();
-    if (!status.includes("success")) {
+    const gtx = await prisma.gatewayTransaction.findUnique({
+      where: { reference: ref },
+    });
+    if (!gtx || gtx.status === "SUCCESS") {
       return NextResponse.json({ ok: true, ignored: true });
     }
-    const chargeId = ref.split("_")[1];
-    const amountRaw =
-      (payload as Record<string, unknown>).amount ??
-      (payload as Record<string, unknown>).principal_amount ??
-      0;
-    // Gateway amount is in kobo.
-    const amountKobo = BigInt(Math.round(Number(amountRaw)));
-    if (chargeId && amountKobo > 0n) {
-      const credited = await creditCardPayment({
-        chargeId,
-        transactionRef: ref,
-        amountKobo,
-      });
-      return NextResponse.json({ ok: true, card: credited });
+    const verified = await rail.verifyTransaction(ref);
+    if (verified.status !== "success") {
+      if (verified.status === "failed") {
+        await prisma.gatewayTransaction.update({
+          where: { reference: ref },
+          data: { status: "FAILED" },
+        });
+      }
+      return NextResponse.json({ ok: true, status: verified.status });
     }
-    return NextResponse.json({ ok: true, ignored: true });
+    const credited = await creditCardPayment({
+      chargeId: gtx.chargeId,
+      transactionRef: ref,
+      amountKobo: gtx.amountKobo,
+    });
+    await prisma.gatewayTransaction.update({
+      where: { reference: ref },
+      data: { status: "SUCCESS" },
+    });
+    return NextResponse.json({ ok: true, card: credited });
   }
 
   const transfer = rail.parseInbound(payload);

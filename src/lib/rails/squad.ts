@@ -9,6 +9,7 @@ import type {
   ResolvedAccount,
   SendTransferParams,
   TransferResult,
+  VerifyResult,
   VirtualAccountResult,
 } from "./types";
 
@@ -105,6 +106,31 @@ export class SquadRail implements NgnRail {
       checkoutUrl: json.data?.checkout_url ?? null,
       providerRef: json.data?.transaction_ref ?? p.reference,
     };
+  }
+
+  async verifyTransaction(reference: string): Promise<VerifyResult> {
+    // Mock: treat as success; caller credits its own recorded amount.
+    if (!this.live) return { status: "success", amountKobo: null };
+    const res = await fetch(`${this.base}/transaction/verify/${reference}`, {
+      headers: { Authorization: `Bearer ${this.key}` },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) return { status: "unknown", amountKobo: null };
+    const json = (await res.json()) as {
+      data?: { transaction_status?: string; transaction_amount?: number | string };
+    };
+    const s = (json.data?.transaction_status ?? "").toLowerCase();
+    const status = s.includes("success")
+      ? "success"
+      : s.includes("fail")
+        ? "failed"
+        : s
+          ? "pending"
+          : "unknown";
+    const amt = json.data?.transaction_amount;
+    // Gateway amounts are in kobo (verify against docs.squadco.com).
+    const amountKobo = amt != null ? BigInt(Math.round(Number(amt))) : null;
+    return { status, amountKobo };
   }
 
   verifySignature(rawBody: string, signature: string | null): boolean {

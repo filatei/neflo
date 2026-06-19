@@ -436,6 +436,22 @@ enum WebhookDeliveryStatus {
   FAILED
 }
 
+// An in-flight hosted-gateway (card/USSD) transaction. We record the amount we
+// initiated so crediting uses our figure, not the (unit-ambiguous) webhook body.
+model GatewayTransaction {
+  id         String   @id @default(cuid())
+  reference  String   @unique
+  chargeId   String
+  merchantId String
+  amountKobo BigInt
+  status     String   @default("PENDING") // PENDING | SUCCESS | FAILED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([chargeId])
+  @@map("gateway_transactions")
+}
+
 // A merchant withdrawal of NGN balance to a bank account.
 model Payout {
   id            String       @id @default(cuid())

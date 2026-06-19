@@ -27,6 +27,11 @@ export async function POST(
   const reference = `cg_${charge.id}_${randomBytes(6).toString("hex")}`;
   const base = process.env.APP_URL ?? new URL(req.url).origin;
 
+  // Record the amount we initiate so crediting later uses our figure.
+  await prisma.gatewayTransaction.create({
+    data: { reference, chargeId: charge.id, merchantId: charge.merchantId, amountKobo },
+  });
+
   try {
     const init = await getNgnRail().initiateCheckout({
       chargeId: charge.id,
@@ -41,6 +46,10 @@ export async function POST(
 
     // Mock mode: no hosted page — settle immediately.
     await creditCardPayment({ chargeId: charge.id, transactionRef: reference, amountKobo });
+    await prisma.gatewayTransaction.update({
+      where: { reference },
+      data: { status: "SUCCESS" },
+    });
     return NextResponse.json({ paid: true });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 502 });

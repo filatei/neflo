@@ -57,6 +57,11 @@ export type CheckoutInit = {
   providerRef: string;
 };
 
+export type VerifyResult = {
+  status: "success" | "failed" | "pending" | "unknown";
+  amountKobo: bigint | null;
+};
+
 export interface NgnRail {
   readonly name: string;
 
@@ -66,6 +71,8 @@ export interface NgnRail {
   ): Promise<VirtualAccountResult>;
   /** Card / USSD via the hosted payment gateway. */
   initiateCheckout(params: InitiateCheckoutParams): Promise<CheckoutInit>;
+  /** Server-side confirmation of a gateway transaction (don't trust webhooks). */
+  verifyTransaction(reference: string): Promise<VerifyResult>;
   /** Verify a webhook's signature header against the raw request body. */
   verifySignature(rawBody: string, signature: string | null): boolean;
   /** Normalise a provider webhook body into an InboundTransfer (or null). */
