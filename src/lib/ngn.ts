@@ -89,3 +89,50 @@ export async function creditNgnTransfer(t: InboundTransfer): Promise<boolean> {
   await recomputeChargeStatus(va.chargeId);
   return true;
 }
+
+/**
+ * Credit a card/USSD payment (hosted gateway) to a charge. Idempotent on the
+ * gateway transaction reference.
+ */
+export async function creditCardPayment(params: {
+  chargeId: string;
+  transactionRef: string;
+  amountKobo: bigint;
+}): Promise<boolean> {
+  const charge = await prisma.charge.findUnique({
+    where: { id: params.chargeId },
+  });
+  if (!charge) return false;
+
+  const rate = await getUsdRate("NGN");
+  const usdAmount = Number(params.amountKobo) / 100 / rate;
+  const rail = getNgnRail();
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.ngnPayment.create({
+        data: {
+          chargeId: charge.id,
+          merchantId: charge.merchantId,
+          provider: rail.name,
+          method: "card",
+          transactionRef: params.transactionRef,
+          amountKobo: params.amountKobo,
+          usdAmount: usdAmount.toFixed(6),
+        },
+      });
+      await postLedger(tx, {
+        merchantId: charge.merchantId,
+        ccy: "NGN",
+        amountMinor: params.amountKobo,
+        kind: "DEPOSIT_CREDIT",
+        reference: `card:${rail.name}:${params.transactionRef}`,
+      });
+    });
+  } catch {
+    return false; // duplicate transactionRef → already credited
+  }
+
+  await recomputeChargeStatus(charge.id);
+  return true;
+}

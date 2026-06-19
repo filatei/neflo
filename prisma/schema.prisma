@@ -248,13 +248,16 @@ model NgnVirtualAccount {
   @@map("ngn_virtual_accounts")
 }
 
-// A received NGN transfer into a charge's virtual account.
+// A received NGN payment for a charge — bank transfer (virtual account) or
+// card/USSD (payment gateway).
 model NgnPayment {
   id               String   @id @default(cuid())
-  virtualAccountId String
+  virtualAccountId String?
   chargeId         String
   merchantId       String
   provider         String
+  // "transfer" | "card"
+  method           String   @default("transfer")
   // Provider's unique transaction reference — idempotency key.
   transactionRef   String   @unique
   amountKobo       BigInt
@@ -262,8 +265,8 @@ model NgnPayment {
   usdAmount        Decimal  @db.Decimal(38, 6)
   createdAt        DateTime @default(now())
 
-  virtualAccount NgnVirtualAccount @relation(fields: [virtualAccountId], references: [id], onDelete: Cascade)
-  charge         Charge            @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  virtualAccount NgnVirtualAccount? @relation(fields: [virtualAccountId], references: [id], onDelete: Cascade)
+  charge         Charge             @relation(fields: [chargeId], references: [id], onDelete: Cascade)
 
   @@index([chargeId])
   @@map("ngn_payments")

@@ -43,6 +43,20 @@ export type TransferResult = {
   failureReason?: string;
 };
 
+export type InitiateCheckoutParams = {
+  chargeId: string;
+  amountKobo: bigint;
+  email?: string;
+  reference: string;
+  callbackUrl: string;
+};
+
+export type CheckoutInit = {
+  // Hosted payment-page URL to redirect the payer to. null => settle in mock.
+  checkoutUrl: string | null;
+  providerRef: string;
+};
+
 export interface NgnRail {
   readonly name: string;
 
@@ -50,6 +64,8 @@ export interface NgnRail {
   createVirtualAccount(
     params: CreateVirtualAccountParams,
   ): Promise<VirtualAccountResult>;
+  /** Card / USSD via the hosted payment gateway. */
+  initiateCheckout(params: InitiateCheckoutParams): Promise<CheckoutInit>;
   /** Verify a webhook's signature header against the raw request body. */
   verifySignature(rawBody: string, signature: string | null): boolean;
   /** Normalise a provider webhook body into an InboundTransfer (or null). */

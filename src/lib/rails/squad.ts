@@ -1,8 +1,10 @@
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "crypto";
 import type {
   Bank,
+  CheckoutInit,
   CreateVirtualAccountParams,
   InboundTransfer,
+  InitiateCheckoutParams,
   NgnRail,
   ResolvedAccount,
   SendTransferParams,
@@ -68,6 +70,40 @@ export class SquadRail implements NgnRail {
       bankName: d.bank_name ?? "GTBank",
       accountName: d.account_name ?? p.customerName,
       providerRef: d.customer_identifier ?? p.reference,
+    };
+  }
+
+  async initiateCheckout(p: InitiateCheckoutParams): Promise<CheckoutInit> {
+    // Mock: no hosted page — caller credits immediately.
+    if (!this.live) return { checkoutUrl: null, providerRef: p.reference };
+
+    const res = await fetch(`${this.base}/transaction/initiate`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.key}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        // Squad gateway amount is in kobo.
+        amount: Number(p.amountKobo),
+        email: p.email || "customer@neflo.pay",
+        currency: "NGN",
+        initiate_type: "inline",
+        transaction_ref: p.reference,
+        callback_url: p.callbackUrl,
+        payment_channels: ["card", "ussd", "bank"],
+      }),
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) {
+      throw new Error(`Squad checkout init failed (HTTP ${res.status})`);
+    }
+    const json = (await res.json()) as {
+      data?: { checkout_url?: string; transaction_ref?: string };
+    };
+    return {
+      checkoutUrl: json.data?.checkout_url ?? null,
+      providerRef: json.data?.transaction_ref ?? p.reference,
     };
   }
 

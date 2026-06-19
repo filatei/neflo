@@ -31,7 +31,7 @@ export function CheckoutClient({
   const { success, error } = useToast();
   const [status, setStatus] = useState<Status>(initialStatus);
   const [paidUsd, setPaidUsd] = useState(0);
-  const [method, setMethod] = useState<"crypto" | "ngn">("crypto");
+  const [method, setMethod] = useState<"crypto" | "ngn" | "card">("crypto");
   const [chain, setChain] = useState<Chain | null>(null);
   const [address, setAddress] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
@@ -44,6 +44,27 @@ export function CheckoutClient({
     amountNgn: number;
   } | null>(null);
   const [ngnLoading, setNgnLoading] = useState(false);
+  const [cardLoading, setCardLoading] = useState(false);
+
+  async function startCard() {
+    setCardLoading(true);
+    try {
+      const res = await fetch(`/api/pay/${id}/card`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not start payment");
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl; // hosted gateway
+        return;
+      }
+      // Mock mode settled instantly — the poller will flip to Paid.
+      success("Payment received");
+      poll();
+    } catch (e) {
+      error((e as Error).message);
+    } finally {
+      setCardLoading(false);
+    }
+  }
 
   async function startBankTransfer() {
     setNgnLoading(true);
@@ -177,11 +198,12 @@ export function CheckoutClient({
       )}
 
       {/* Method toggle */}
-      <div className="mt-5 grid grid-cols-2 gap-2">
+      <div className="mt-5 grid grid-cols-3 gap-2">
         {(
           [
-            ["crypto", "Crypto (USDT/USDC)"],
-            ["ngn", "Bank transfer (₦)"],
+            ["crypto", "Crypto"],
+            ["ngn", "Transfer"],
+            ["card", "Card / USSD"],
           ] as const
         ).map(([m, label]) => (
           <button
@@ -300,6 +322,21 @@ export function CheckoutClient({
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {method === "card" && (
+        <div className="mt-5">
+          <button
+            onClick={startCard}
+            className="btn-primary w-full"
+            disabled={cardLoading}
+          >
+            {cardLoading ? "Starting…" : `Pay ${amount} with card / USSD`}
+          </button>
+          <p className="mt-2 text-center text-[11px] font-medium text-ink-400">
+            You&apos;ll be taken to a secure page to complete payment.
+          </p>
         </div>
       )}
     </div>
