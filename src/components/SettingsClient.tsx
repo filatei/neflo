@@ -32,6 +32,7 @@ export function SettingsClient({
   const [banks, setBanks] = useState<Bank[]>([]);
   const [saving, setSaving] = useState(false);
   const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState("");
 
   useEffect(() => {
     fetch("/api/merchant/banks")
@@ -43,6 +44,8 @@ export function SettingsClient({
   const set = (k: keyof Profile, v: string) => setP((s) => ({ ...s, [k]: v }));
 
   async function resolve(code: string, num: string) {
+    set("settlementAccountName", "");
+    setResolveError("");
     if (!code || num.length !== 10) return;
     setResolving(true);
     try {
@@ -52,9 +55,12 @@ export function SettingsClient({
         body: JSON.stringify({ bankCode: code, accountNumber: num }),
       });
       const data = await res.json();
-      if (res.ok) set("settlementAccountName", data.accountName);
-    } catch {
-      /* ignore */
+      if (!res.ok || !data.accountName) {
+        throw new Error(data.message ?? data.error ?? "Account not found");
+      }
+      set("settlementAccountName", data.accountName);
+    } catch (e) {
+      setResolveError((e as Error).message);
     } finally {
       setResolving(false);
     }
@@ -122,9 +128,16 @@ export function SettingsClient({
             />
           </div>
         </div>
-        {resolving && <p className="text-xs font-semibold text-ink-400">Resolving…</p>}
-        {p.settlementAccountName && (
-          <p className="text-sm font-bold text-ink-700">{p.settlementAccountName}</p>
+        {resolving && (
+          <p className="text-xs font-semibold text-ink-400">Verifying account…</p>
+        )}
+        {p.settlementAccountName && !resolving && (
+          <p className="text-sm font-bold text-ink-900">
+            ✓ {p.settlementAccountName}
+          </p>
+        )}
+        {resolveError && !resolving && (
+          <p className="text-xs font-bold text-ink-500">{resolveError}</p>
         )}
       </section>
 

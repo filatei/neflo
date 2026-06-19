@@ -32,6 +32,7 @@ export function PayoutsClient({
   const [bankCode, setBankCode] = useState("");
   const [accountNumber, setAccountNumber] = useState("");
   const [accountName, setAccountName] = useState("");
+  const [resolveError, setResolveError] = useState("");
   const [amount, setAmount] = useState("");
   const [resolving, setResolving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -54,12 +55,10 @@ export function PayoutsClient({
   }
 
   async function resolve(code: string, num: string) {
-    if (!code || num.length !== 10) {
-      setAccountName("");
-      return;
-    }
-    setResolving(true);
     setAccountName("");
+    setResolveError("");
+    if (!code || num.length !== 10) return;
+    setResolving(true);
     try {
       const res = await fetch("/api/merchant/resolve-account", {
         method: "POST",
@@ -67,10 +66,12 @@ export function PayoutsClient({
         body: JSON.stringify({ bankCode: code, accountNumber: num }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Could not resolve account");
+      if (!res.ok || !data.accountName) {
+        throw new Error(data.message ?? data.error ?? "Account not found");
+      }
       setAccountName(data.accountName);
     } catch (e) {
-      error((e as Error).message);
+      setResolveError((e as Error).message);
     } finally {
       setResolving(false);
     }
@@ -214,11 +215,18 @@ export function PayoutsClient({
             />
             {resolving && (
               <p className="mt-1 text-xs font-semibold text-ink-400">
-                Resolving…
+                Verifying account…
               </p>
             )}
-            {accountName && (
-              <p className="mt-1 text-xs font-bold text-ink-700">{accountName}</p>
+            {accountName && !resolving && (
+              <p className="mt-1 text-sm font-bold text-ink-900">
+                ✓ {accountName}
+              </p>
+            )}
+            {resolveError && !resolving && (
+              <p className="mt-1 text-xs font-bold text-ink-500">
+                {resolveError}
+              </p>
             )}
           </div>
           <div>
