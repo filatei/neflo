@@ -51,6 +51,24 @@ export function emailShell(title: string, body: string) {
   </td></tr></table></body></html>`;
 }
 
+/** Passwordless sign-in link email. */
+export async function sendMagicLinkEmail(to: string, url: string) {
+  const body = `Click the button below to sign in to Neflo. This link expires
+    shortly and can only be used once.<br><br>
+    <a href="${url}" style="display:inline-block;background:#000;color:#fff;
+      text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;
+      border-radius:12px">Sign in to Neflo</a><br><br>
+    <span style="font-size:12px;color:#8f8f8f">If the button doesn't work, paste
+    this URL into your browser:<br>${url}</span><br><br>
+    <span style="font-size:12px;color:#8f8f8f">If you didn't request this, you can
+    safely ignore this email.</span>`;
+  return sendMail({
+    to,
+    subject: "Your Neflo sign-in link",
+    html: emailShell("Sign in to Neflo", body),
+  });
+}
+
 /** Notify a merchant that a stablecoin deposit was credited. */
 export async function sendDepositCreditedEmail(params: {
   to: string;

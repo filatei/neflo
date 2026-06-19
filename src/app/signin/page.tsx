@@ -12,7 +12,7 @@ export default async function SignInPage() {
         <Logo size={24} />
         <h1 className="mt-6 text-2xl font-bold tracking-tight">Sign in</h1>
         <p className="mt-1 text-sm font-medium text-ink-500">
-          Continue with your Google account to access your dashboard.
+          Continue with Google or get a one-time link by email.
         </p>
 
         <form
@@ -27,9 +27,43 @@ export default async function SignInPage() {
           </button>
         </form>
 
+        <div className="my-5 flex items-center gap-3">
+          <span className="h-px flex-1 bg-ink-100" />
+          <span className="text-xs font-bold uppercase tracking-wide text-ink-400">
+            or
+          </span>
+          <span className="h-px flex-1 bg-ink-100" />
+        </div>
+
+        <form
+          className="space-y-3"
+          action={async (formData: FormData) => {
+            "use server";
+            const email = String(formData.get("email") ?? "").trim();
+            await signIn("nodemailer", { email, redirectTo: "/dashboard" });
+          }}
+        >
+          <div>
+            <label className="label" htmlFor="email">
+              Email address
+            </label>
+            <input
+              id="email"
+              name="email"
+              type="email"
+              required
+              autoComplete="email"
+              placeholder="you@company.com"
+              className="input"
+            />
+          </div>
+          <button type="submit" className="btn-secondary w-full">
+            Email me a sign-in link
+          </button>
+        </form>
+
         <p className="mt-4 text-xs font-medium text-ink-400">
-          By continuing you agree to Neflo&apos;s terms. Access may be limited to
-          approved addresses.
+          By continuing you agree to Neflo&apos;s terms.
         </p>
       </div>
     </main>

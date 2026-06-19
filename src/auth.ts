@@ -1,7 +1,9 @@
 import NextAuth from "next-auth";
 import Google from "next-auth/providers/google";
+import Nodemailer from "next-auth/providers/nodemailer";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/db";
+import { sendMagicLinkEmail } from "@/lib/mailer";
 
 /**
  * Auth.js v5 config — Google sign-in, mirroring Otuburu's flow.
@@ -21,6 +23,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   pages: {
     signIn: "/signin",
+    verifyRequest: "/signin/check-email",
   },
   providers: [
     Google({
@@ -28,6 +31,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
       authorization: {
         params: { prompt: "select_account" },
+      },
+    }),
+    Nodemailer({
+      server: {
+        host: process.env.SMTP_HOST,
+        port: Number(process.env.SMTP_PORT ?? 465),
+        secure: (process.env.SMTP_SECURE ?? "true") === "true",
+        auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      },
+      from: process.env.SMTP_FROM,
+      // Brand the email with our monochrome shell via the shared mailer.
+      sendVerificationRequest: async ({ identifier, url }) => {
+        await sendMagicLinkEmail(identifier, url);
       },
     }),
   ],
