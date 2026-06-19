@@ -74,6 +74,9 @@ jobs:
             cd /opt/neflo/app
 
             # Runtime secrets — rewritten from GitHub Secrets every deploy.
+            # Drop any stale .env first (it may be owned by neflo/root from a prior run;
+            # the dir is group-writable + non-sticky, so user1 can replace it).
+            rm -f .env
             cat > .env <<EOF
             NODE_ENV=production
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
@@ -101,7 +104,9 @@ jobs:
             USD_TO_NGN_RATE=${{ secrets.USD_TO_NGN_RATE }}
             CONVERSION_SPREAD_BPS=${{ secrets.CONVERSION_SPREAD_BPS }}
             EOF
-            chmod 600 .env
+            # 640 + group neflo so the user1-run `docker compose` can still read it
+            # after the chown below (user1 is a member of the neflo group).
+            chmod 640 .env
 
             # Keep ownership consistent with the no-login app user.
             sudo chown -R neflo:neflo /opt/neflo/app
