@@ -30,7 +30,10 @@ const SECTIONS: Section[] = [
   },
   {
     label: "Account",
-    items: [{ href: "/dashboard/settings", label: "Settings" }],
+    items: [
+      { href: "/dashboard/team", label: "Team" },
+      { href: "/dashboard/settings", label: "Settings" },
+    ],
   },
 ];
 
@@ -60,7 +63,8 @@ export function Sidebar({
     <div className="flex h-full flex-col bg-ink-900 text-white">
       <div className="flex items-center justify-between px-5 py-5 text-white">
         <Link href="/dashboard" onClick={() => setOpen(false)}>
-          <Logo size={22} />
+          {/* White tile on the dark sidebar → dark arrows. */}
+          <Logo size={22} glyph="#0d0d0d" />
         </Link>
         <button
           className="rounded-md p-1 text-ink-300 hover:text-white md:hidden"

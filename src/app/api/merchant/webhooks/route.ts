@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentMerchant } from "@/lib/merchant";
+import { canDevelop, getCurrentMembership, getCurrentMerchant } from "@/lib/merchant";
 
 const schema = z.object({
   url: z.string().url().max(500),
@@ -21,10 +21,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const merchant = await getCurrentMerchant();
-  if (!merchant) {
+  const m = await getCurrentMembership();
+  if (!m) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
+  if (!canDevelop(m.role)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const merchant = m.merchant;
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: "enter a valid https URL" }, { status: 400 });

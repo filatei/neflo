@@ -107,6 +107,7 @@ model Merchant {
   balances         MerchantBalance[]
   charges          Charge[]
   payouts          Payout[]
+  invites          MerchantInvite[]
 
   @@map("merchants")
 }
@@ -129,6 +130,24 @@ model MerchantMember {
 
   @@unique([merchantId, userId])
   @@map("merchant_members")
+}
+
+// Pending invitation to join a merchant. Accepted when the invited email signs in.
+model MerchantInvite {
+  id         String     @id @default(cuid())
+  merchantId String
+  email      String
+  role       MemberRole @default(VIEWER)
+  token      String     @unique
+  invitedBy  String?
+  acceptedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([email])
+  @@map("merchant_invites")
 }
 
 enum MemberRole {

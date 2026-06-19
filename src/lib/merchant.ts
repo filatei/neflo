@@ -39,3 +39,29 @@ export async function requireMerchant() {
 export function isActive(merchant: { status: string }) {
   return merchant.status === "ACTIVE";
 }
+
+/** The signed-in user's primary merchant plus their role on it. */
+export async function getCurrentMembership() {
+  const session = await auth();
+  const userId = session?.user?.id;
+  if (!userId) return null;
+
+  const m = await prisma.merchantMember.findFirst({
+    where: { userId },
+    include: { merchant: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (m) return { merchant: m.merchant, role: m.role, userId };
+
+  // First-time user — bootstrap as OWNER.
+  const merchant = await getCurrentMerchant();
+  return merchant ? { merchant, role: "OWNER" as const, userId } : null;
+}
+
+export function canManage(role: string) {
+  return role === "OWNER" || role === "ADMIN";
+}
+
+export function canDevelop(role: string) {
+  return canManage(role) || role === "DEVELOPER";
+}

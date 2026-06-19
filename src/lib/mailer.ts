@@ -73,6 +73,26 @@ export async function sendMagicLinkEmail(to: string, url: string) {
   });
 }
 
+/** Invite a teammate to a merchant. */
+export async function sendInviteEmail(
+  to: string,
+  url: string,
+  merchantName: string,
+  role: string,
+) {
+  const body = `You've been invited to join <b>${merchantName}</b> on Neflo as
+    <b>${role.toLowerCase()}</b>.<br><br>
+    <a href="${url}" style="display:inline-block;background:#000;color:#fff;
+      text-decoration:none;font-weight:700;font-size:14px;padding:12px 20px;
+      border-radius:12px">Accept invitation</a><br><br>
+    <span style="font-size:12px;color:#8f8f8f">Or paste this link: ${url}</span>`;
+  return sendMail({
+    to,
+    subject: `You're invited to ${merchantName} on Neflo`,
+    html: emailShell("Team invitation", body),
+  });
+}
+
 /** Notify a merchant that a stablecoin deposit was credited. */
 export async function sendDepositCreditedEmail(params: {
   to: string;

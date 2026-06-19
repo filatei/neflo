@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentMerchant } from "@/lib/merchant";
+import { canManage, getCurrentMembership, getCurrentMerchant } from "@/lib/merchant";
 import { createPayout, InsufficientBalanceError } from "@/lib/payout";
 
 const schema = z.object({
@@ -24,10 +24,17 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const merchant = await getCurrentMerchant();
-  if (!merchant) {
+  const m = await getCurrentMembership();
+  if (!m) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
+  if (!canManage(m.role)) {
+    return NextResponse.json(
+      { error: "forbidden", message: "Only owners and admins can withdraw" },
+      { status: 403 },
+    );
+  }
+  const merchant = m.merchant;
   if (merchant.status !== "ACTIVE") {
     return NextResponse.json(
       { error: "kyb_required", message: "Complete business verification to withdraw" },

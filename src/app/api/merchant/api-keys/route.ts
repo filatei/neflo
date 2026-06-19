@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentMerchant } from "@/lib/merchant";
+import { canDevelop, getCurrentMembership, getCurrentMerchant } from "@/lib/merchant";
 import { generateApiKey } from "@/lib/apikey";
 
 const createSchema = z.object({
@@ -23,10 +23,14 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const merchant = await getCurrentMerchant();
-  if (!merchant) {
+  const m = await getCurrentMembership();
+  if (!m) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
+  if (!canDevelop(m.role)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const merchant = m.merchant;
   const parsed = createSchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid input" }, { status: 400 });
