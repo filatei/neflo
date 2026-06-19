@@ -18,6 +18,7 @@ export function DepositClient() {
   const [address, setAddress] = useState<string | null>(null);
   const [qr, setQr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function generate(next: Chain) {
     setChain(next);
@@ -46,6 +47,8 @@ export function DepositClient() {
     try {
       await navigator.clipboard.writeText(address);
       success("Address copied to clipboard");
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
     } catch {
       error("Couldn't copy — select and copy manually");
     }
@@ -61,7 +64,7 @@ export function DepositClient() {
               key={c.id}
               onClick={() => generate(c.id)}
               className={
-                "flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors " +
+                "flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-black focus-visible:ring-offset-2 " +
                 (chain === c.id
                   ? "border-black bg-ink-50"
                   : "border-ink-200 hover:bg-ink-50")
@@ -102,7 +105,7 @@ export function DepositClient() {
               {address}
             </p>
             <button onClick={copy} className="btn-secondary mt-4">
-              Copy address
+              {copied ? "Copied ✓" : "Copy address"}
             </button>
             <p className="mt-3 text-xs font-medium text-ink-400">
               Send only {chain === "TRON" ? "TRC20" : "ERC20"} USDT or USDC to
