@@ -116,8 +116,20 @@ export function CheckoutClient({
   pollRef.current = poll;
   useEffect(() => {
     if (done) return;
-    const t = window.setInterval(() => pollRef.current(), 5000);
-    return () => window.clearInterval(t);
+    // Poll every 12s, and only when the tab is visible — gentle on the server.
+    const tick = () => {
+      if (!document.hidden) pollRef.current();
+    };
+    const t = window.setInterval(tick, 12000);
+    // Re-check promptly when the payer returns to the tab.
+    const onVisible = () => {
+      if (!document.hidden) pollRef.current();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [done]);
 
   async function pickChain(next: Chain) {

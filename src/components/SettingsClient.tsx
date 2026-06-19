@@ -68,6 +68,11 @@ export function SettingsClient({
 
   async function submit() {
     if (!p.legalName.trim()) return error("Enter your legal business name");
+    // If a settlement account is being entered, require it to verify first.
+    const enteringBank = !!(p.settlementBankCode || p.settlementAccountNumber);
+    if (enteringBank && !p.settlementAccountName) {
+      return error("Verify the settlement account first");
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/merchant/profile", {
@@ -149,7 +154,11 @@ export function SettingsClient({
               ? "Submitted — under review."
               : "Not yet submitted."}
         </p>
-        <button className="btn-primary" onClick={submit} disabled={saving}>
+        <button
+          className="btn-primary"
+          onClick={submit}
+          disabled={saving || resolving}
+        >
           {saving ? "Saving…" : submitted ? "Update & resubmit" : "Submit for verification"}
         </button>
       </div>
