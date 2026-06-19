@@ -28,12 +28,30 @@ services:
       # Talk to Postgres over the private network by service name.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-neflo}:${POSTGRES_PASSWORD:-neflo}@postgres:5432/${POSTGRES_DB:-neflo}?schema=public"
       PORT: "3000"
-    # Publish only on loopback; Apache terminates TLS and proxies to it.
+    # Loopback publish kept for local checks (monitor.sh); real ingress is Caddy.
     ports:
       - "127.0.0.1:${APP_PORT:-8090}:3000"
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - neflo-net
+
+  # Neflo's dedicated ingress — Cloudflare proxies neflo.torama.money here on
+  # :8443, bypassing the shared Apache. See infra/CLOUDFLARE-INGRESS.md.
+  caddy:
+    image: caddy:2-alpine
+    container_name: neflo-caddy
+    restart: unless-stopped
+    depends_on:
+      - app
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /opt/neflo/origin:/etc/caddy/origin:ro
+      - neflo_caddy_data:/data
+      - neflo_caddy_config:/config
     networks:
       - neflo-net
 
@@ -56,6 +74,10 @@ services:
       retries: 5
     networks:
       - neflo-net
+
+volumes:
+  neflo_caddy_data:
+  neflo_caddy_config:
 
 networks:
   neflo-net:
