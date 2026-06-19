@@ -2,6 +2,7 @@ import { prisma } from "./db";
 import { quoteConversion } from "./conversion";
 import { postLedger } from "./ledger";
 import { sendDepositCreditedEmail } from "./mailer";
+import { recomputeChargeStatus } from "./charge";
 
 /**
  * Credit a confirmed stablecoin deposit:
@@ -15,7 +16,7 @@ import { sendDepositCreditedEmail } from "./mailer";
 export async function creditDeposit(depositId: string): Promise<void> {
   const dep = await prisma.stablecoinDeposit.findUnique({
     where: { id: depositId },
-    include: { merchant: true },
+    include: { merchant: true, address: true },
   });
   if (!dep) throw new Error(`deposit ${depositId} not found`);
   if (dep.status === "CREDITED") return; // already done
@@ -81,5 +82,15 @@ export async function creditDeposit(depositId: string): Promise<void> {
     );
   } catch (e) {
     console.error("[credit] email notify failed", e);
+  }
+
+  // If this deposit funded a hosted-checkout charge, advance the charge status
+  // (and fire the charge.paid webhook when it tips over the expected amount).
+  if (dep.address?.chargeId) {
+    try {
+      await recomputeChargeStatus(dep.address.chargeId);
+    } catch (e) {
+      console.error("[credit] charge status update failed", e);
+    }
   }
 }

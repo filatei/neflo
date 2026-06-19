@@ -91,6 +91,7 @@ model Merchant {
   ledgerEntries    LedgerEntry[]
   webhooks         WebhookEndpoint[]
   balances         MerchantBalance[]
+  charges          Charge[]
 
   @@map("merchants")
 }
@@ -161,9 +162,11 @@ enum Asset {
 }
 
 // A per-merchant, per-chain HD-derived deposit address.
+// When chargeId is set, the address belongs to a single hosted-checkout charge.
 model DepositAddress {
   id           String   @id @default(cuid())
   merchantId   String
+  chargeId     String?
   chain        Chain
   address      String
   // BIP44 derivation index used to derive this address from the master seed.
@@ -172,12 +175,46 @@ model DepositAddress {
   createdAt    DateTime @default(now())
 
   merchant Merchant            @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  charge   Charge?             @relation(fields: [chargeId], references: [id], onDelete: Cascade)
   deposits StablecoinDeposit[]
 
   @@unique([chain, address])
   @@unique([chain, derivationIx])
   @@index([merchantId])
+  @@index([chargeId])
   @@map("deposit_addresses")
+}
+
+// Hosted-checkout charge: a shareable payment request.
+model Charge {
+  id          String       @id @default(cuid())
+  merchantId  String
+  // Expected amount in USD (USDT/USDC are treated 1:1 with USD).
+  amountUsd   Decimal      @db.Decimal(38, 6)
+  description String?
+  reference   String?
+  successUrl  String?
+  status      ChargeStatus @default(PENDING)
+  // Running total received (USD) across this charge's addresses.
+  paidUsd     Decimal      @db.Decimal(38, 6) @default(0)
+  expiresAt   DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  merchant  Merchant         @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  addresses DepositAddress[]
+
+  @@index([merchantId])
+  @@index([status])
+  @@map("charges")
+}
+
+enum ChargeStatus {
+  PENDING
+  PAID
+  UNDERPAID
+  EXPIRED
 }
 
 model StablecoinDeposit {
