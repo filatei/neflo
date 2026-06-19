@@ -107,6 +107,7 @@ main() {
   sudo tee "$SUDOERS_FILE" >/dev/null <<EOF
 ${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/chown -R neflo\\:neflo /opt/neflo/app
 ${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/chown -R neflo\\:neflo /opt/neflo
+${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/chown -R ${ADMIN_USER}\\:neflo /opt/neflo/app
 ${ADMIN_USER} ALL=(root) NOPASSWD: /usr/sbin/a2ensite neflo.torama.money
 ${ADMIN_USER} ALL=(root) NOPASSWD: /usr/bin/systemctl reload apache2
 EOF

@@ -49,6 +49,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Self-heal ownership: a previously re-run old deploy may have left the
+      # app dir owned by neflo. Make it user1-owned so the SCP can overwrite.
+      - name: Ensure app dir is writable
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.LINODE_HOST }}
+          username: ${{ secrets.LINODE_USER }}
+          key: ${{ secrets.LINODE_SSH_KEY }}
+          port: ${{ secrets.LINODE_SSH_PORT }}
+          script: |
+            sudo chown -R user1:neflo /opt/neflo/app
+
       # Push deploy-time files into the provisioned app dir.
       # (server-setup.sh must have been run once beforehand.)
       - name: Copy compose & infra to server
