@@ -224,9 +224,18 @@ export function PayoutsClient({
               </p>
             )}
             {resolveError && !resolving && (
-              <p className="mt-1 text-xs font-bold text-ink-500">
-                {resolveError}
-              </p>
+              <div className="mt-2">
+                <p className="text-xs font-bold text-ink-500">
+                  Couldn&apos;t verify ({resolveError}). Enter the account name
+                  manually:
+                </p>
+                <input
+                  className="input mt-1"
+                  placeholder="Account holder name"
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                />
+              </div>
             )}
           </div>
           <div>

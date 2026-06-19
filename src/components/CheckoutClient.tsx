@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { useToast } from "@/components/ui/Toast";
 
@@ -56,9 +56,9 @@ export function CheckoutClient({
         window.location.href = data.checkoutUrl; // hosted gateway
         return;
       }
-      // Mock mode settled instantly — the poller will flip to Paid.
+      // Mock mode settled instantly — flip optimistically; SSE confirms.
       success("Payment received");
-      poll();
+      setStatus("PAID");
     } catch (e) {
       error((e as Error).message);
     } finally {
@@ -93,44 +93,38 @@ export function CheckoutClient({
     }
   }
 
-  // Poll for payment while the charge is open.
-  const poll = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/pay/${id}/status`, { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      setPaidUsd(data.paidUsd ?? 0);
-      setStatus(data.status);
-      if (data.status === "PAID" && successUrl) {
-        window.setTimeout(() => {
-          window.location.href = successUrl;
-        }, 2500);
-      }
-    } catch {
-      /* transient — keep polling */
-    }
-  }, [id, successUrl]);
-
+  // Live payment status via Server-Sent Events: one connection, server pushes
+  // changes — no client polling.
   const done = status === "PAID" || status === "EXPIRED";
-  const pollRef = useRef(poll);
-  pollRef.current = poll;
   useEffect(() => {
     if (done) return;
-    // Poll every 12s, and only when the tab is visible — gentle on the server.
-    const tick = () => {
-      if (!document.hidden) pollRef.current();
+    const es = new EventSource(`/api/pay/${id}/events`);
+    es.onmessage = (e) => {
+      let data: {
+        status?: Status;
+        paidUsd?: number;
+        successUrl?: string | null;
+        error?: string;
+      };
+      try {
+        data = JSON.parse(e.data);
+      } catch {
+        return;
+      }
+      if (data.error || !data.status) return;
+      setPaidUsd(data.paidUsd ?? 0);
+      setStatus(data.status);
+      if (data.status === "PAID") {
+        es.close();
+        const url = data.successUrl ?? successUrl;
+        if (url) window.setTimeout(() => (window.location.href = url), 2500);
+      } else if (data.status === "EXPIRED") {
+        es.close();
+      }
     };
-    const t = window.setInterval(tick, 12000);
-    // Re-check promptly when the payer returns to the tab.
-    const onVisible = () => {
-      if (!document.hidden) pollRef.current();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(t);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [done]);
+    // On error EventSource auto-reconnects; nothing to do.
+    return () => es.close();
+  }, [id, done, successUrl]);
 
   async function pickChain(next: Chain) {
     setChain(next);

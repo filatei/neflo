@@ -142,7 +142,18 @@ export function SettingsClient({
           </p>
         )}
         {resolveError && !resolving && (
-          <p className="text-xs font-bold text-ink-500">{resolveError}</p>
+          <div>
+            <p className="text-xs font-bold text-ink-500">
+              Couldn&apos;t verify ({resolveError}). Enter the account name
+              manually:
+            </p>
+            <input
+              className="input mt-1"
+              placeholder="Account holder name"
+              value={p.settlementAccountName}
+              onChange={(e) => set("settlementAccountName", e.target.value)}
+            />
+          </div>
         )}
       </section>
 
