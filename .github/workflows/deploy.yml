@@ -60,6 +60,7 @@ jobs:
           port: ${{ secrets.LINODE_SSH_PORT }}
           source: "docker-compose.yml,docker-entrypoint.sh,prisma/**,infra/**,scripts/**"
           target: "/opt/neflo/app"
+          overwrite: true
 
       - name: Write .env and roll the stack
         uses: appleboy/ssh-action@v1.2.0
@@ -104,12 +105,10 @@ jobs:
             USD_TO_NGN_RATE=${{ secrets.USD_TO_NGN_RATE }}
             CONVERSION_SPREAD_BPS=${{ secrets.CONVERSION_SPREAD_BPS }}
             EOF
-            # 640 + group neflo so the user1-run `docker compose` can still read it
-            # after the chown below (user1 is a member of the neflo group).
+            # 640: user1 (the deploy user) owns it; group neflo may read. The app
+            # container receives these as env vars — it never reads the file itself,
+            # so the code dir stays user1-owned and deploys can always overwrite it.
             chmod 640 .env
-
-            # Keep ownership consistent with the no-login app user.
-            sudo chown -R neflo:neflo /opt/neflo/app
 
             export IMAGE_TAG="${{ github.sha }}"
             echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u filatei --password-stdin
