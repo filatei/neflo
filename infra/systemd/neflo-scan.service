@@ -1,0 +1,12 @@
+[Unit]
+Description=Neflo deposit scanner tick
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=neflo
+Group=neflo
+ExecStart=/usr/bin/bash /opt/neflo/app/scripts/scan-tick.sh
+# Don't spam the journal if the app is briefly down during a deploy.
+SuccessExitStatus=0 7 22
