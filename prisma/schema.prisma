@@ -267,12 +267,12 @@ model NgnVirtualAccount {
   @@map("ngn_virtual_accounts")
 }
 
-// A received NGN payment for a charge — bank transfer (virtual account) or
-// card/USSD (payment gateway).
+// A received NGN payment — for a charge (checkout) OR a merchant deposit
+// account (no charge). Source: bank transfer (virtual account) or card/USSD.
 model NgnPayment {
   id               String   @id @default(cuid())
   virtualAccountId String?
-  chargeId         String
+  chargeId         String?
   merchantId       String
   provider         String
   // "transfer" | "card"
@@ -285,10 +285,26 @@ model NgnPayment {
   createdAt        DateTime @default(now())
 
   virtualAccount NgnVirtualAccount? @relation(fields: [virtualAccountId], references: [id], onDelete: Cascade)
-  charge         Charge             @relation(fields: [chargeId], references: [id], onDelete: Cascade)
+  charge         Charge?            @relation(fields: [chargeId], references: [id], onDelete: Cascade)
 
   @@index([chargeId])
+  @@index([merchantId])
   @@map("ngn_payments")
+}
+
+// A permanent NUBAN a merchant shares to receive Naira directly (not tied to a
+// charge). Inbound transfers credit the merchant's NGN balance.
+model MerchantVirtualAccount {
+  id            String   @id @default(cuid())
+  merchantId    String   @unique
+  provider      String
+  accountNumber String
+  bankName      String
+  accountName   String
+  providerRef   String   @unique
+  createdAt     DateTime @default(now())
+
+  @@map("merchant_virtual_accounts")
 }
 
 enum ChargeStatus {

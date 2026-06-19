@@ -45,16 +45,57 @@ export async function getOrCreateChargeVirtualAccount(
   });
 }
 
+/** Provision (or fetch) a merchant's permanent NUBAN for receiving Naira. */
+export async function getOrCreateMerchantVirtualAccount(merchant: {
+  id: string;
+  name: string;
+}) {
+  const existing = await prisma.merchantVirtualAccount.findUnique({
+    where: { merchantId: merchant.id },
+  });
+  if (existing) return existing;
+
+  const rail = getNgnRail();
+  // NOTE (live): Squad's permanent/customer virtual account uses a different
+  // endpoint than the dynamic per-charge one — verify when wiring live keys.
+  const va = await rail.createVirtualAccount({
+    chargeId: "merchant",
+    amountKobo: 0n,
+    customerName: merchant.name || "Merchant",
+    reference: `mrc_${merchant.id}`,
+  });
+  return prisma.merchantVirtualAccount.create({
+    data: {
+      merchantId: merchant.id,
+      provider: rail.name,
+      accountNumber: va.accountNumber,
+      bankName: va.bankName,
+      accountName: va.accountName,
+      providerRef: va.providerRef,
+    },
+  });
+}
+
 /**
  * Credit a received NGN transfer: record the payment (idempotent on
- * transactionRef), credit the merchant's NGN ledger directly, and advance the
- * charge. Returns true if newly credited.
+ * transactionRef), credit the merchant's NGN ledger directly. Matches a charge
+ * virtual account (advances the charge) OR a merchant deposit account (no
+ * charge). Returns true if newly credited.
  */
 export async function creditNgnTransfer(t: InboundTransfer): Promise<boolean> {
   const va = await prisma.ngnVirtualAccount.findFirst({
     where: { accountNumber: t.accountNumber },
   });
-  if (!va) return false; // not one of ours
+  const mva = va
+    ? null
+    : await prisma.merchantVirtualAccount.findFirst({
+        where: { accountNumber: t.accountNumber },
+      });
+  if (!va && !mva) return false; // not one of ours
+
+  const merchantId = va ? va.merchantId : mva!.merchantId;
+  const chargeId = va ? va.chargeId : null;
+  const provider = va ? va.provider : mva!.provider;
 
   const rate = await getUsdRate("NGN");
   const usdAmount = Number(t.amountKobo) / 100 / rate;
@@ -63,10 +104,10 @@ export async function creditNgnTransfer(t: InboundTransfer): Promise<boolean> {
     await prisma.$transaction(async (tx) => {
       await tx.ngnPayment.create({
         data: {
-          virtualAccountId: va.id,
-          chargeId: va.chargeId,
-          merchantId: va.merchantId,
-          provider: va.provider,
+          virtualAccountId: va ? va.id : null,
+          chargeId,
+          merchantId,
+          provider,
           transactionRef: t.transactionRef,
           amountKobo: t.amountKobo,
           usdAmount: usdAmount.toFixed(6),
@@ -74,11 +115,11 @@ export async function creditNgnTransfer(t: InboundTransfer): Promise<boolean> {
       });
       // NGN received is already in the settlement currency — credit directly.
       await postLedger(tx, {
-        merchantId: va.merchantId,
+        merchantId,
         ccy: "NGN",
         amountMinor: t.amountKobo,
         kind: "DEPOSIT_CREDIT",
-        reference: `ngn:${va.provider}:${t.transactionRef}`,
+        reference: `ngn:${provider}:${t.transactionRef}`,
       });
     });
   } catch {
@@ -86,7 +127,7 @@ export async function creditNgnTransfer(t: InboundTransfer): Promise<boolean> {
     return false;
   }
 
-  await recomputeChargeStatus(va.chargeId);
+  if (chargeId) await recomputeChargeStatus(chargeId);
   return true;
 }
 
