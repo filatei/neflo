@@ -33,11 +33,11 @@ ENV HOSTNAME=0.0.0.0
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
-# Prisma schema + generated client + engine for `migrate deploy` at startup.
+# Prisma schema + the FULL dependency tree. The Next standalone build only
+# traces the server's runtime modules, which omits the Prisma CLI and its deps
+# (e.g. `effect`) needed to run `db push` at startup — so copy the complete set.
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules ./node_modules
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 
 EXPOSE 3000

@@ -1,10 +1,12 @@
 #!/bin/sh
-# Apply pending DB migrations, then start the standalone Next.js server.
+# Sync the schema to the database, then start the standalone Next.js server.
+# We use `db push` (no migration history yet); it's idempotent and only applies
+# the diff. Switch to `migrate deploy` once a prisma/migrations/ history exists.
 set -e
 
-echo "[neflo] applying database migrations..."
-node node_modules/prisma/build/index.js migrate deploy || {
-  echo "[neflo] migrate deploy failed" >&2
+echo "[neflo] syncing database schema..."
+node node_modules/prisma/build/index.js db push --skip-generate || {
+  echo "[neflo] prisma db push failed" >&2
   exit 1
 }
 
