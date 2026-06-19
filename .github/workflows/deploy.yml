@@ -92,6 +92,9 @@ jobs:
             rm -f .env
             cat > .env <<EOF
             NODE_ENV=production
+            # Pin the deployed image so manual \`docker compose up\` uses this exact
+            # build, never a stale floating :latest (which caused a schema-mismatch outage).
+            IMAGE_TAG=${{ github.sha }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             APP_URL=${{ secrets.APP_URL }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}

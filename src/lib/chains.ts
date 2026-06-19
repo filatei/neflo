@@ -33,10 +33,13 @@ export const CHAIN_LABEL: Record<Chain, string> = {
 export const EVM_CHAINS: Chain[] = ["ETHEREUM", "POLYGON"];
 
 export function evmRpcUrl(chain: Chain): string {
+  // `||` (not `??`) so an empty/"-" env value falls back to a working default.
+  // PublicNode defaults — free public RPCs like llamarpc/polygon-rpc block VPS
+  // IPs. For production prefer a dedicated Alchemy/Infura URL via the env var.
   if (chain === "ETHEREUM")
-    return process.env.ETH_RPC_URL ?? "https://eth.llamarpc.com";
+    return process.env.ETH_RPC_URL || "https://ethereum-rpc.publicnode.com";
   if (chain === "POLYGON")
-    return process.env.POLYGON_RPC_URL ?? "https://polygon-rpc.com";
+    return process.env.POLYGON_RPC_URL || "https://polygon-bor-rpc.publicnode.com";
   throw new Error(`No EVM RPC for chain ${chain}`);
 }
 
