@@ -33,9 +33,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   callbacks: {
     async signIn({ user }) {
-      // If an allowlist is configured, restrict sign-in to those addresses.
-      if (adminEmails.length === 0) return true;
-      return !!user.email && adminEmails.includes(user.email.toLowerCase());
+      // Public platform: any Google account may sign up as a merchant.
+      // Optional private-beta gate: if SIGNUP_ALLOWLIST is set, restrict to it.
+      const allow = (process.env.SIGNUP_ALLOWLIST ?? "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean);
+      if (allow.length === 0) return true;
+      return !!user.email && allow.includes(user.email.toLowerCase());
     },
     async jwt({ token, user }) {
       if (user?.email) {
