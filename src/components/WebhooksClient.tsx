@@ -12,6 +12,17 @@ type Hook = {
   createdAt: string;
 };
 
+type Delivery = {
+  id: string;
+  event: string;
+  status: "PENDING" | "SUCCESS" | "FAILED";
+  attempts: number;
+  responseStatus: number | null;
+  lastError: string | null;
+  nextRetryAt: string | null;
+  createdAt: string;
+};
+
 export function WebhooksClient({ initial }: { initial: Hook[] }) {
   const { success, error } = useToast();
   const [list, setList] = useState<Hook[]>(initial);
@@ -19,6 +30,25 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [removeId, setRemoveId] = useState<string | null>(null);
+  const [logOpen, setLogOpen] = useState(false);
+  const [logLoading, setLogLoading] = useState(false);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+
+  async function openLog(id: string) {
+    setLogOpen(true);
+    setLogLoading(true);
+    setDeliveries([]);
+    try {
+      const res = await fetch(`/api/merchant/webhooks/${id}/deliveries`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not load log");
+      setDeliveries(data.deliveries);
+    } catch (e) {
+      error((e as Error).message);
+    } finally {
+      setLogLoading(false);
+    }
+  }
 
   async function add() {
     if (!url.trim()) {
@@ -132,6 +162,12 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
                     {h.active ? "Pause" : "Resume"}
                   </button>
                   <button
+                    className="btn-secondary text-xs"
+                    onClick={() => openLog(h.id)}
+                  >
+                    View log
+                  </button>
+                  <button
                     className="btn-ghost text-xs"
                     onClick={() => setRemoveId(h.id)}
                   >
@@ -182,6 +218,50 @@ export function WebhooksClient({ initial }: { initial: Hook[] }) {
         onCancel={() => setRemoveId(null)}
         onConfirm={() => removeId && remove(removeId)}
       />
+
+      <Modal
+        open={logOpen}
+        onClose={() => setLogOpen(false)}
+        title="Delivery log"
+        description="Most recent attempts. Failures auto-retry with backoff."
+        footer={
+          <button className="btn-secondary" onClick={() => setLogOpen(false)}>
+            Close
+          </button>
+        }
+      >
+        {logLoading ? (
+          <p className="py-6 text-center text-sm font-semibold text-ink-400">
+            Loading…
+          </p>
+        ) : deliveries.length === 0 ? (
+          <p className="py-6 text-center text-sm font-medium text-ink-400">
+            No deliveries yet.
+          </p>
+        ) : (
+          <ul className="max-h-80 divide-y divide-ink-100 overflow-y-auto">
+            {deliveries.map((d) => (
+              <li key={d.id} className="py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-bold">{d.event}</span>
+                  <span className="badge">{d.status}</span>
+                </div>
+                <p className="mt-1 text-xs font-medium text-ink-400">
+                  attempt {d.attempts}
+                  {d.responseStatus != null && ` · HTTP ${d.responseStatus}`}
+                  {d.lastError && ` · ${d.lastError}`}
+                </p>
+                <p className="text-[11px] font-medium text-ink-400">
+                  {new Date(d.createdAt).toLocaleString()}
+                  {d.status === "PENDING" &&
+                    d.nextRetryAt &&
+                    ` · retry ${new Date(d.nextRetryAt).toLocaleTimeString()}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
     </section>
   );
 }

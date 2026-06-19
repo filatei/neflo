@@ -318,10 +318,41 @@ model WebhookEndpoint {
   active     Boolean  @default(true)
   createdAt  DateTime @default(now())
 
-  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  merchant   Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  deliveries WebhookDelivery[]
 
   @@index([merchantId])
   @@map("webhook_endpoints")
+}
+
+// One attempt-tracked delivery of an event to an endpoint (with retries).
+model WebhookDelivery {
+  id             String                @id @default(cuid())
+  endpointId     String
+  merchantId     String
+  event          String
+  // The exact JSON body that was signed and sent.
+  payload        String
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  responseStatus Int?
+  lastError      String?
+  nextRetryAt    DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  endpoint WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([endpointId])
+  @@index([status, nextRetryAt])
+  @@map("webhook_deliveries")
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 // Singleton-ish cursor so the monitor can resume scanning per chain.

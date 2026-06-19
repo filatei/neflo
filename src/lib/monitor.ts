@@ -8,6 +8,7 @@ import {
   evmRpcUrl,
 } from "./chains";
 import { creditDeposit } from "./credit";
+import { retryDueWebhooks } from "./webhook";
 
 const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
 const MIN_CONF = () => Number(process.env.MIN_CONFIRMATIONS ?? 12);
@@ -30,6 +31,10 @@ export async function runMonitor(): Promise<{
   }
   detected += await scanTron();
   const credited = await settleConfirmed();
+  // Piggyback webhook retries on the same timer.
+  await retryDueWebhooks().catch((e) =>
+    console.error("[monitor] webhook retry failed", e),
+  );
   return { detected, credited };
 }
 
