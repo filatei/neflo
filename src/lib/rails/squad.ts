@@ -201,8 +201,20 @@ export class SquadRail implements NgnRail {
       }),
       signal: AbortSignal.timeout(12_000),
     });
-    if (!res.ok) throw new Error(`Account lookup failed (HTTP ${res.status})`);
-    const json = (await res.json()) as { data?: { account_name?: string } };
+    // Squad sometimes returns an HTML error page (e.g. key/URL mismatch).
+    // Parse defensively so the user sees a clean message, not "Unexpected token <".
+    const text = await res.text();
+    let json: { data?: { account_name?: string }; message?: string } | null;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = null;
+    }
+    if (!res.ok || !json) {
+      throw new Error(
+        json?.message ?? `Account lookup unavailable (HTTP ${res.status})`,
+      );
+    }
     return { accountName: json.data?.account_name ?? "" };
   }
 
