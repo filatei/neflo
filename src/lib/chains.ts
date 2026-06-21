@@ -32,6 +32,12 @@ export const CHAIN_LABEL: Record<Chain, string> = {
 
 export const EVM_CHAINS: Chain[] = ["ETHEREUM", "POLYGON"];
 
+/** Chain id per EVM chain — used to pin the provider network (no auto-detect). */
+export const EVM_CHAIN_ID: Partial<Record<Chain, number>> = {
+  ETHEREUM: 1,
+  POLYGON: 137,
+};
+
 export function evmRpcUrl(chain: Chain): string {
   // `||` (not `??`) so an empty/"-" env value falls back to a working default.
   // PublicNode defaults — free public RPCs like llamarpc/polygon-rpc block VPS
@@ -41,6 +47,17 @@ export function evmRpcUrl(chain: Chain): string {
   if (chain === "POLYGON")
     return process.env.POLYGON_RPC_URL || "https://polygon-bor-rpc.publicnode.com";
   throw new Error(`No EVM RPC for chain ${chain}`);
+}
+
+/**
+ * Optional WebSocket RPC per chain (e.g. Alchemy `wss://…`). When set, the
+ * deposit watcher subscribes to Transfer events in real time instead of
+ * polling. Returns null when not configured (watcher stays off for that chain).
+ */
+export function evmWssUrl(chain: Chain): string | null {
+  if (chain === "ETHEREUM") return process.env.ETH_WSS_URL || null;
+  if (chain === "POLYGON") return process.env.POLYGON_WSS_URL || null;
+  return null;
 }
 
 /** Which assets are offered on each chain in the UI. */

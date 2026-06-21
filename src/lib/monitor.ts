@@ -3,6 +3,7 @@ import type { Asset, Chain } from "@prisma/client";
 import { prisma } from "./db";
 import {
   EVM_CHAINS,
+  EVM_CHAIN_ID,
   STABLECOIN_DECIMALS,
   TOKEN_CONTRACTS,
   evmRpcUrl,
@@ -10,9 +11,52 @@ import {
 import { creditDeposit } from "./credit";
 import { retryDueWebhooks } from "./webhook";
 
-const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
+export const TRANSFER_TOPIC = ethers.id("Transfer(address,address,uint256)");
 const MIN_CONF = () => Number(process.env.MIN_CONFIRMATIONS ?? 12);
 
+/** Deposit-address row (id + address + owning merchant). */
+export type WatchedAddress = { id: string; address: string; merchantId: string };
+
+/** Load the deposit addresses we watch on a chain, keyed by lowercase address. */
+export async function loadWatchedAddresses(
+  chain: Chain,
+): Promise<Map<string, WatchedAddress>> {
+  const rows = await prisma.depositAddress.findMany({
+    where: { chain },
+    select: { id: true, address: true, merchantId: true },
+  });
+  return new Map(rows.map((a) => [a.address.toLowerCase(), a]));
+}
+
+/**
+ * Record a deposit from a single ERC-20 Transfer log if its `to` is one of ours.
+ * Shared by the polling scanner and the real-time WebSocket watcher; idempotent
+ * on (chain, txHash). Returns true when a new deposit row was created.
+ */
+export async function processEvmTransferLog(
+  chain: Chain,
+  asset: Asset,
+  log: { topics: ReadonlyArray<string>; data: string; transactionHash: string },
+  byAddress: Map<string, WatchedAddress>,
+): Promise<boolean> {
+  const toTopic = log.topics[2]?.toLowerCase();
+  const to = toTopic ? "0x" + toTopic.slice(26) : "";
+  const owned = byAddress.get(to);
+  if (!owned) return false;
+  const value = BigInt(log.data);
+  const amount = formatUnits(value, STABLECOIN_DECIMALS);
+  const fromTopic = log.topics[1];
+  const from = fromTopic ? "0x" + fromTopic.slice(26) : null;
+  return recordDeposit({
+    merchantId: owned.merchantId,
+    addressId: owned.id,
+    chain,
+    asset,
+    txHash: log.transactionHash,
+    fromAddress: from,
+    amount,
+  });
+}
 /**
  * The deposit monitor. Two responsibilities:
  *   1. detect new inbound USDT/USDC transfers to our deposit addresses
@@ -42,69 +86,61 @@ export async function runMonitor(): Promise<{
 // EVM (Ethereum, Polygon)
 // ---------------------------------------------------------------------------
 
+/** A JsonRpcProvider with a PINNED network, so ethers never enters the
+ *  "failed to detect network — retry in 1s" loop on a bad/unauthorized RPC. */
+function evmProvider(chain: Chain): ethers.JsonRpcProvider {
+  const id = EVM_CHAIN_ID[chain];
+  const net = id ? new ethers.Network(chain, id) : undefined;
+  return new ethers.JsonRpcProvider(evmRpcUrl(chain), net, {
+    staticNetwork: net,
+  });
+}
+
 async function scanEvmChain(chain: Chain): Promise<number> {
-  const addresses = await prisma.depositAddress.findMany({
-    where: { chain },
-    select: { id: true, address: true, merchantId: true },
-  });
-  if (addresses.length === 0) return 0;
+  const byAddress = await loadWatchedAddresses(chain);
+  if (byAddress.size === 0) return 0;
 
-  const provider = new ethers.JsonRpcProvider(evmRpcUrl(chain));
-  const tip = await provider.getBlockNumber();
+  const provider = evmProvider(chain);
+  try {
+    const tip = await provider.getBlockNumber();
 
-  const cursor = await prisma.monitorCursor.findUnique({ where: { chain } });
-  // Default: scan a small recent window on first run.
-  const fromBlock = cursor ? Number(cursor.lastBlock) + 1 : Math.max(0, tip - 500);
-  const toBlock = tip;
-  if (fromBlock > toBlock) return 0;
+    const cursor = await prisma.monitorCursor.findUnique({ where: { chain } });
+    const fromBlock = cursor ? Number(cursor.lastBlock) + 1 : Math.max(0, tip - 500);
+    const toBlock = tip;
+    if (fromBlock > toBlock) return 0;
 
-  const byAddress = new Map(
-    addresses.map((a) => [a.address.toLowerCase(), a]),
-  );
-  const ownedTopics = addresses.map((a) =>
-    ethers.zeroPadValue(a.address, 32).toLowerCase(),
-  );
+    const ownedTopics = [...byAddress.values()].map((a) =>
+      ethers.zeroPadValue(a.address, 32).toLowerCase(),
+    );
 
-  let found = 0;
-  for (const asset of ["USDT", "USDC"] as Asset[]) {
-    const token = TOKEN_CONTRACTS[chain][asset];
-    // topic[2] is the indexed `to`; filter to our addresses.
-    const logs = await provider.getLogs({
-      address: token,
-      fromBlock,
-      toBlock,
-      topics: [TRANSFER_TOPIC, null, ownedTopics],
-    });
-    for (const log of logs) {
-      const toTopic = log.topics[2]?.toLowerCase();
-      const to = toTopic ? "0x" + toTopic.slice(26) : "";
-      const owned = byAddress.get(to);
-      if (!owned) continue;
-      const value = BigInt(log.data);
-      const amount = formatUnits(value, STABLECOIN_DECIMALS);
-      const fromTopic = log.topics[1];
-      const from = fromTopic ? "0x" + fromTopic.slice(26) : null;
-
-      const created = await recordDeposit({
-        merchantId: owned.merchantId,
-        addressId: owned.id,
-        chain,
-        asset,
-        txHash: log.transactionHash,
-        fromAddress: from,
-        amount,
+    let found = 0;
+    for (const asset of ["USDT", "USDC"] as Asset[]) {
+      const token = TOKEN_CONTRACTS[chain][asset];
+      const logs = await provider.getLogs({
+        address: token,
+        fromBlock,
+        toBlock,
+        topics: [TRANSFER_TOPIC, null, ownedTopics],
       });
-      if (created) found++;
+      for (const log of logs) {
+        if (await processEvmTransferLog(chain, asset, log, byAddress)) found++;
+      }
     }
+
+    await prisma.monitorCursor.upsert({
+      where: { chain },
+      create: { chain, lastBlock: BigInt(toBlock) },
+      update: { lastBlock: BigInt(toBlock), lastScanAt: new Date() },
+    });
+    return found;
+  } catch (e) {
+    // One concise line per failed tick — never a flood. Other chains + TRON +
+    // settlement still run.
+    console.warn(`[monitor] ${chain} scan skipped: ${(e as Error).message}`);
+    return 0;
+  } finally {
+    provider.destroy();
   }
-
-  await prisma.monitorCursor.upsert({
-    where: { chain },
-    create: { chain, lastBlock: BigInt(toBlock) },
-    update: { lastBlock: BigInt(toBlock), lastScanAt: new Date() },
-  });
-
-  return found;
 }
 
 // ---------------------------------------------------------------------------

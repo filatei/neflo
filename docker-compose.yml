@@ -20,6 +20,13 @@ services:
       dockerfile: Dockerfile
     container_name: neflo-app
     restart: unless-stopped
+    # Cap the json-file logs so a noisy run can never fill the disk:
+    # 4 rotated files × 50 MB = 200 MB max.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "4"
     # Run as the host `neflo` user for correct volume ownership.
     user: "${NEFLO_UID}:${NEFLO_GID}"
     env_file:
