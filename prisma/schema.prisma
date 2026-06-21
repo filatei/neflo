@@ -82,9 +82,19 @@ model Merchant {
   status          MerchantStatus @default(PENDING)
 
   // --- KYB / business profile ---
+  // applicantType: BUSINESS (registered) or INDIVIDUAL (name + NIN).
+  applicantType           String?  @default("BUSINESS")
   legalName               String?
+  // registrationType: RC (company) or BN (business name). registrationNumber
+  // holds the digits only (no "RC"/"BN" prefix).
+  registrationType        String?
   registrationNumber      String?
   businessType            String?
+  // Individual applicants: full name + 11-digit NIN.
+  fullName                String?
+  nin                     String?
+  // Optional uploaded registration certificate (path on the uploads volume).
+  certificatePath         String?
   country                 String?  @default("NG")
   phone                   String?
   website                 String?

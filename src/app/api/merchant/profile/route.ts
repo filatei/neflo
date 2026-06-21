@@ -3,17 +3,39 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentMerchant } from "@/lib/merchant";
 
-const schema = z.object({
-  legalName: z.string().min(2).max(120),
-  registrationNumber: z.string().max(40).optional(),
-  businessType: z.string().max(60).optional(),
-  phone: z.string().max(30).optional(),
-  website: z.string().url().max(200).optional().or(z.literal("")),
-  address: z.string().max(200).optional(),
-  settlementBankCode: z.string().max(10).optional(),
-  settlementAccountNumber: z.string().max(10).optional(),
-  settlementAccountName: z.string().max(120).optional(),
-});
+const str = (max: number) => z.string().max(max).optional().or(z.literal(""));
+
+const schema = z
+  .object({
+    applicantType: z.enum(["BUSINESS", "INDIVIDUAL"]).default("BUSINESS"),
+    // Business
+    legalName: str(120),
+    registrationType: z.enum(["RC", "BN"]).optional().or(z.literal("")),
+    registrationNumber: str(40),
+    businessType: str(60),
+    // Individual
+    fullName: str(120),
+    nin: str(11),
+    // Shared
+    phone: str(30),
+    website: z.string().url().max(200).optional().or(z.literal("")),
+    address: str(200),
+    settlementBankCode: str(10),
+    settlementAccountNumber: str(10),
+    settlementAccountName: str(120),
+  })
+  .superRefine((d, ctx) => {
+    if (d.applicantType === "INDIVIDUAL") {
+      if (!d.fullName || d.fullName.trim().length < 2) {
+        ctx.addIssue({ code: "custom", path: ["fullName"], message: "Enter your full name." });
+      }
+      if (!d.nin || !/^\d{11}$/.test(d.nin)) {
+        ctx.addIssue({ code: "custom", path: ["nin"], message: "Enter your 11-digit NIN." });
+      }
+    } else if (!d.legalName || d.legalName.trim().length < 2) {
+      ctx.addIssue({ code: "custom", path: ["legalName"], message: "Enter your legal business name." });
+    }
+  });
 
 // Save the KYB/business profile and mark it submitted for review.
 export async function POST(req: Request) {
@@ -23,25 +45,30 @@ export async function POST(req: Request) {
   }
   const parsed = schema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "invalid_request", details: parsed.error.flatten() },
-      { status: 400 },
-    );
+    // Surface the first human message rather than a raw zod blob.
+    const first = parsed.error.issues[0]?.message ?? "Please check the form and try again.";
+    return NextResponse.json({ error: first }, { status: 400 });
   }
   const d = parsed.data;
+  const individual = d.applicantType === "INDIVIDUAL";
+  const displayName = (individual ? d.fullName : d.legalName) || merchant.name;
   await prisma.merchant.update({
     where: { id: merchant.id },
     data: {
-      legalName: d.legalName,
-      name: d.legalName,
-      registrationNumber: d.registrationNumber,
-      businessType: d.businessType,
-      phone: d.phone,
+      applicantType: d.applicantType,
+      name: displayName,
+      legalName: individual ? null : d.legalName || null,
+      registrationType: individual ? null : d.registrationType || null,
+      registrationNumber: individual ? null : d.registrationNumber || null,
+      businessType: individual ? null : d.businessType || null,
+      fullName: individual ? d.fullName || null : null,
+      nin: individual ? d.nin || null : null,
+      phone: d.phone || null,
       website: d.website || null,
-      address: d.address,
-      settlementBankCode: d.settlementBankCode,
-      settlementAccountNumber: d.settlementAccountNumber,
-      settlementAccountName: d.settlementAccountName,
+      address: d.address || null,
+      settlementBankCode: d.settlementBankCode || null,
+      settlementAccountNumber: d.settlementAccountNumber || null,
+      settlementAccountName: d.settlementAccountName || null,
       kybSubmittedAt: new Date(),
     },
   });

@@ -28,6 +28,13 @@ services:
       # Talk to Postgres over the private network by service name.
       DATABASE_URL: "postgresql://${POSTGRES_USER:-neflo}:${POSTGRES_PASSWORD:-neflo}@postgres:5432/${POSTGRES_DB:-neflo}?schema=public"
       PORT: "3000"
+      # Where uploaded business-registration certificates are written.
+      UPLOAD_DIR: "/app/uploads"
+    # Persisted uploads (KYB certificates). Bind-mount a host dir owned by the
+    # neflo user so the non-root container can write it:
+    #   sudo install -d -o $NEFLO_UID -g $NEFLO_GID /opt/neflo/uploads
+    volumes:
+      - /opt/neflo/uploads:/app/uploads
     # Loopback publish kept for local checks (monitor.sh); real ingress is Caddy.
     ports:
       - "127.0.0.1:${APP_PORT:-8090}:3000"

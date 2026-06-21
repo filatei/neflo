@@ -19,10 +19,16 @@ export default async function SettingsPage() {
       <SettingsClient
         status={merchant.status}
         submitted={!!merchant.kybSubmittedAt}
+        hasCertificate={!!merchant.certificatePath}
         initial={{
+          applicantType:
+            (merchant.applicantType as "BUSINESS" | "INDIVIDUAL") ?? "BUSINESS",
           legalName: merchant.legalName ?? merchant.name ?? "",
+          registrationType: merchant.registrationType ?? "",
           registrationNumber: merchant.registrationNumber ?? "",
           businessType: merchant.businessType ?? "",
+          fullName: merchant.fullName ?? "",
+          nin: merchant.nin ?? "",
           phone: merchant.phone ?? "",
           website: merchant.website ?? "",
           address: merchant.address ?? "",
