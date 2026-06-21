@@ -96,49 +96,70 @@ function evmProvider(chain: Chain): ethers.JsonRpcProvider {
   });
 }
 
+// Free-tier RPC plans (e.g. Alchemy) cap eth_getLogs to a small block span — 10
+// by default — so we scan in windows of EVM_GETLOGS_RANGE blocks rather than one
+// big request. To bound work per tick we never look back more than
+// EVM_GETLOGS_MAX_SPAN blocks; the real-time WebSocket watcher covers anything
+// more recent, and this poller is only a backfill. Both write idempotently.
+const GETLOGS_RANGE = () => Math.max(1, Number(process.env.EVM_GETLOGS_RANGE ?? 10));
+const GETLOGS_MAX_SPAN = () =>
+  Math.max(1, Number(process.env.EVM_GETLOGS_MAX_SPAN ?? 200));
+
 async function scanEvmChain(chain: Chain): Promise<number> {
   const byAddress = await loadWatchedAddresses(chain);
   if (byAddress.size === 0) return 0;
 
   const provider = evmProvider(chain);
+  const range = GETLOGS_RANGE();
+  let found = 0;
+  let scanned = -1; // highest block fully scanned this tick
+  let fromBlock = 0;
   try {
     const tip = await provider.getBlockNumber();
 
     const cursor = await prisma.monitorCursor.findUnique({ where: { chain } });
-    const fromBlock = cursor ? Number(cursor.lastBlock) + 1 : Math.max(0, tip - 500);
-    const toBlock = tip;
-    if (fromBlock > toBlock) return 0;
+    fromBlock = cursor ? Number(cursor.lastBlock) + 1 : Math.max(0, tip - range);
+    if (fromBlock > tip) return 0;
+    // Don't replay the whole chain if we've fallen far behind a disconnect.
+    if (tip - fromBlock > GETLOGS_MAX_SPAN()) fromBlock = tip - GETLOGS_MAX_SPAN();
+    scanned = fromBlock - 1;
 
     const ownedTopics = [...byAddress.values()].map((a) =>
       ethers.zeroPadValue(a.address, 32).toLowerCase(),
     );
 
-    let found = 0;
-    for (const asset of ["USDT", "USDC"] as Asset[]) {
-      const token = TOKEN_CONTRACTS[chain][asset];
-      const logs = await provider.getLogs({
-        address: token,
-        fromBlock,
-        toBlock,
-        topics: [TRANSFER_TOPIC, null, ownedTopics],
-      });
-      for (const log of logs) {
-        if (await processEvmTransferLog(chain, asset, log, byAddress)) found++;
+    for (let start = fromBlock; start <= tip; start += range) {
+      const end = Math.min(start + range - 1, tip);
+      for (const asset of ["USDT", "USDC"] as Asset[]) {
+        const token = TOKEN_CONTRACTS[chain][asset];
+        const logs = await provider.getLogs({
+          address: token,
+          fromBlock: start,
+          toBlock: end,
+          topics: [TRANSFER_TOPIC, null, ownedTopics],
+        });
+        for (const log of logs) {
+          if (await processEvmTransferLog(chain, asset, log, byAddress)) found++;
+        }
       }
+      scanned = end; // persist progress so a mid-loop failure isn't replayed
     }
-
-    await prisma.monitorCursor.upsert({
-      where: { chain },
-      create: { chain, lastBlock: BigInt(toBlock) },
-      update: { lastBlock: BigInt(toBlock), lastScanAt: new Date() },
-    });
     return found;
   } catch (e) {
     // One concise line per failed tick — never a flood. Other chains + TRON +
     // settlement still run.
     console.warn(`[monitor] ${chain} scan skipped: ${(e as Error).message}`);
-    return 0;
+    return found;
   } finally {
+    if (scanned >= fromBlock) {
+      await prisma.monitorCursor
+        .upsert({
+          where: { chain },
+          create: { chain, lastBlock: BigInt(scanned) },
+          update: { lastBlock: BigInt(scanned), lastScanAt: new Date() },
+        })
+        .catch(() => {});
+    }
     provider.destroy();
   }
 }
