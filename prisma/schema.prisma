@@ -21,6 +21,8 @@ model User {
   emailVerified DateTime?
   image         String?
   isAdmin       Boolean   @default(false)
+  // TapPay transaction PIN (bcrypt hash). Authorises pay-from-balance. Null until set.
+  txnPinHash    String?
   createdAt     DateTime  @default(now())
 
   accounts  Account[]
@@ -401,6 +403,8 @@ enum LedgerKind {
   CONVERSION_SPREAD
   PAYOUT_DEBIT
   ADJUSTMENT
+  TAPPAY_COLLECT_IN
+  TAPPAY_PAY_OUT
 }
 
 // Cached running balance per merchant per currency (derived from the ledger).
@@ -514,4 +518,82 @@ model MonitorCursor {
   lastScanAt   DateTime @default(now())
 
   @@map("monitor_cursors")
+}
+
+// ----------------------------------------------------------------------------
+// TapPay — contactless merchant collection (customer taps/scans to pay a merchant)
+// Isolated module: scalar references (no relations) so it never touches the
+// existing payment models. Redis-free; single-use enforced by an atomic UPDATE.
+// ----------------------------------------------------------------------------
+
+model TapPaySession {
+  id             String            @id @default(cuid())
+  // ULID, embedded in the QR + signed token. Public-facing handle.
+  sessionId      String            @unique
+  // Receiver — always a merchant (the one being paid).
+  merchantId     String
+  // Payer's merchant account, set once they authorise from balance (INTERNAL path).
+  payerMerchantId String?
+  // Actor user who tapped/paid (for audit; balances are per-merchant).
+  payerUserId    String?
+  // Linked Charge for the anonymous card/transfer COLLECTION path.
+  chargeId       String?
+  // Amount the merchant set, locked server-side. Minor units (kobo).
+  amountMinor    BigInt
+  ccy            String            @default("NGN")
+  note           String?
+  status         TapPayStatus      @default(PENDING)
+  channel        TapPayChannel     @default(QR)
+  settlement     TapPaySettlement?
+  // External provider/charge reference (COLLECTION path).
+  providerRef    String?
+  idempotencyKey String?           @unique
+  ipPayer        String?
+  ipMerchant     String?
+  createdAt      DateTime          @default(now())
+  paidAt         DateTime?
+  consumedAt     DateTime?
+  expiresAt      DateTime
+
+  @@index([merchantId, createdAt])
+  @@index([payerMerchantId, createdAt])
+  @@index([status])
+  @@map("tappay_sessions")
+}
+
+enum TapPayStatus {
+  PENDING
+  SCANNED
+  CONSUMING
+  PAID
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum TapPayChannel {
+  QR
+  NFC
+  LINK
+}
+
+enum TapPaySettlement {
+  INTERNAL
+  COLLECTION
+}
+
+// Immutable audit trail for every TapPay lifecycle event (CBN record requirement).
+model TapPayAudit {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  actorId     String?
+  event       String
+  amountMinor BigInt?
+  ip          String?
+  userAgent   String?
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([sessionId])
+  @@map("tappay_audit")
 }
