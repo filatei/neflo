@@ -20,6 +20,9 @@ function transport() {
     host: process.env.SMTP_HOST ?? "smtp-relay.gmail.com",
     port: Number(process.env.SMTP_PORT ?? 587),
     secure: (process.env.SMTP_SECURE ?? "false") === "true",
+    // EHLO/HELO greeting name. MUST be a real FQDN — Google's relay rejects the
+    // container's random Docker hostname with "421-4.7.0 Try again later (EHLO)".
+    name: process.env.SMTP_EHLO_NAME || "neflo.torama.money",
     ...(auth ? { auth } : {}),
   });
   return cached;
