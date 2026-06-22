@@ -1,5 +1,6 @@
 import { prisma } from "./db";
 import { deliverWebhook } from "./webhook";
+import { reconcileChargePaid } from "./tappay/session";
 
 /** Create a hosted-checkout charge for a merchant. */
 export async function createCharge(
@@ -74,5 +75,12 @@ export async function recomputeChargeStatus(chargeId: string) {
       paidUsd: paid,
       reference: charge.reference,
     });
+    // If this charge backs a TapPay collection session, flip it to PAID too
+    // (best-effort — never let it break charge crediting).
+    try {
+      await reconcileChargePaid(chargeId);
+    } catch (e) {
+      console.warn("[charge] tappay reconcile failed", (e as Error).message);
+    }
   }
 }

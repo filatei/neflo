@@ -57,7 +57,27 @@ function CollectPanel() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<CollectState>("idle");
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [checkout, setCheckout] = useState<{
+    full_url: string;
+    virtual_account: { accountNumber: string; bankName: string; accountName: string };
+  } | null>(null);
   const esRef = useRef<EventSource | null>(null);
+
+  async function getCheckoutLink() {
+    if (!sessionId) return;
+    setLinkBusy(true);
+    try {
+      const res = await fetch(`/api/tappay/session/${sessionId}/checkout`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message ?? data.error ?? "Could not create link");
+      setCheckout({ full_url: window.location.origin + data.checkout_url, virtual_account: data.virtual_account });
+    } catch (e) {
+      error((e as Error).message);
+    } finally {
+      setLinkBusy(false);
+    }
+  }
 
   const closeStream = useCallback(() => {
     esRef.current?.close();
@@ -87,6 +107,7 @@ function CollectPanel() {
       error("Enter a valid amount");
       return;
     }
+    setCheckout(null);
     setBusy(true);
     try {
       const res = await fetch("/api/tappay/session", {
@@ -147,6 +168,7 @@ function CollectPanel() {
 
   function reset() {
     closeStream();
+    setCheckout(null);
     setQr(null);
     setSessionId(null);
     setStatus("idle");
@@ -223,6 +245,22 @@ function CollectPanel() {
             <p className="mt-2 font-mono text-xs font-semibold text-ink-400">
               Expires in {mm}:{ss}
             </p>
+            {!checkout ? (
+              <button className="btn-ghost mt-3 text-xs" onClick={getCheckoutLink} disabled={linkBusy}>
+                {linkBusy ? "Creating…" : "Or get a pay link for a non‑Neflo customer"}
+              </button>
+            ) : (
+              <div className="mt-3 w-full rounded-xl border border-ink-100 p-3 text-left">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-ink-400">Pay link</p>
+                <p className="break-all text-xs font-semibold">{checkout.full_url}</p>
+                <p className="mt-2 text-[11px] font-bold uppercase tracking-wide text-ink-400">Or bank transfer</p>
+                <p className="text-sm font-bold">
+                  {checkout.virtual_account.bankName} ·{" "}
+                  <span className="font-mono">{checkout.virtual_account.accountNumber}</span>
+                </p>
+                <p className="text-xs font-medium text-ink-500">{checkout.virtual_account.accountName}</p>
+              </div>
+            )}
           </>
         ) : (
           <p className="py-16 text-sm font-semibold text-ink-400">

@@ -1,7 +1,63 @@
+import type { TapPaySession } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { postLedger } from "@/lib/ledger";
 import { InsufficientBalanceError } from "@/lib/payout";
+import { createCharge } from "@/lib/charge";
+import { getOrCreateChargeVirtualAccount } from "@/lib/ngn";
+import { getUsdRate } from "@/lib/rate";
 import { DAILY_MAX_MINOR, LimitError } from "./limits";
+
+/**
+ * Anonymous (non-Neflo) payer path. Resolve a TapPay session to a Charge and
+ * hand off to Neflo's existing hosted checkout: create the charge (USD-valued
+ * from the NGN amount), link it to the session, and issue a Naira virtual
+ * account. When the customer pays, the existing webhook credits the charge and
+ * recomputeChargeStatus() reconciles the session to PAID.
+ */
+export async function createCollectionCheckout(session: TapPaySession): Promise<{
+  chargeId: string;
+  checkoutUrl: string;
+  virtualAccount: {
+    accountNumber: string;
+    bankName: string;
+    accountName: string;
+    amountKobo: number;
+  };
+}> {
+  let chargeId = session.chargeId;
+  if (!chargeId) {
+    const rate = await getUsdRate("NGN");
+    const amountUsd = Number(session.amountMinor) / 100 / rate;
+    const charge = await createCharge(session.merchantId, {
+      amountUsd,
+      description: session.note ?? "TapPay payment",
+      reference: `tappay_${session.sessionId}`,
+    });
+    chargeId = charge.id;
+    await prisma.tapPaySession.update({
+      where: { sessionId: session.sessionId },
+      data: { chargeId, settlement: "COLLECTION" },
+    });
+  }
+
+  const charge = await prisma.charge.findUnique({ where: { id: chargeId } });
+  if (!charge) throw new Error("Charge not found");
+  const va = await getOrCreateChargeVirtualAccount(
+    { id: charge.id, merchantId: charge.merchantId, amountUsd: charge.amountUsd },
+    "TapPay customer",
+  );
+
+  return {
+    chargeId,
+    checkoutUrl: `/pay/${chargeId}`,
+    virtualAccount: {
+      accountNumber: va.accountNumber,
+      bankName: va.bankName,
+      accountName: va.accountName,
+      amountKobo: Number(va.amountKobo),
+    },
+  };
+}
 
 /** Rolling 24h cap on what a payer account can spend via TapPay (internal path). */
 export async function assertDailyCap(

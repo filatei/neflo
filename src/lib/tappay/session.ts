@@ -142,6 +142,18 @@ export async function markPaid(
   publish(sessionId, "paid", { amountMinor: s.amountMinor, ref: s.providerRef ?? s.sessionId });
 }
 
+/**
+ * Flip a TapPay COLLECTION session to PAID once its linked Charge is paid (an
+ * anonymous customer paid by card/transfer). Called from recomputeChargeStatus
+ * on the charge's PENDING -> PAID transition. Best-effort, idempotent.
+ */
+export async function reconcileChargePaid(chargeId: string): Promise<void> {
+  const tp = await prisma.tapPaySession.findFirst({
+    where: { chargeId, status: { in: ["PENDING", "SCANNED", "CONSUMING"] } },
+  });
+  if (tp) await markPaid(tp.sessionId, { providerRef: chargeId });
+}
+
 export async function markFailed(sessionId: string, reason: string): Promise<void> {
   await prisma.tapPaySession.updateMany({
     where: { sessionId, status: { in: ["CONSUMING", "SCANNED", "PENDING"] } },
