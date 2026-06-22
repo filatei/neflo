@@ -14,6 +14,7 @@ const SECTIONS: Section[] = [
     label: "Accept payments",
     items: [
       { href: "/dashboard/payments", label: "Payment links" },
+      { href: "/dashboard/tappay", label: "TapPay" },
       { href: "/dashboard/deposit", label: "Deposit" },
     ],
   },
