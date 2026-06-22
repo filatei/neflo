@@ -80,7 +80,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "passkey_challenge_missing" }, { status: 400 });
     const ok = await verifyAuthentication(
       m.userId,
-      parsed.data.assertion as Parameters<typeof verifyAuthentication>[1],
+      parsed.data.assertion as unknown as Parameters<typeof verifyAuthentication>[1],
       challenge,
     );
     if (!ok) {
