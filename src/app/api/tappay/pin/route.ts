@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentMembership } from "@/lib/merchant";
 import { hashPin, verifyPin, isValidPinFormat } from "@/lib/tappay/pin";
+import { hasPasskeys } from "@/lib/tappay/webauthn";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ const schema = z.object({
   current_pin: z.string().optional(),
 });
 
-/** Whether the signed-in user has a TapPay PIN set. */
+/** Whether the signed-in user has a TapPay PIN and/or a passkey set. */
 export async function GET() {
   const m = await getCurrentMembership();
   if (!m) return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
@@ -19,7 +20,10 @@ export async function GET() {
     where: { id: m.userId },
     select: { txnPinHash: true },
   });
-  return NextResponse.json({ pin_set: Boolean(user?.txnPinHash) });
+  return NextResponse.json({
+    pin_set: Boolean(user?.txnPinHash),
+    passkey_set: await hasPasskeys(m.userId),
+  });
 }
 
 /** Set (first time) or change the TapPay transaction PIN. */

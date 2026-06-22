@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
+import { startRegistration, startAuthentication } from "@simplewebauthn/browser";
 import { useToast } from "@/components/ui/Toast";
 
 /**
@@ -252,6 +253,7 @@ function PayPanel() {
   const [newPin, setNewPin] = useState("");
   const [busy, setBusy] = useState(false);
   const [failMsg, setFailMsg] = useState("");
+  const [passkeySet, setPasskeySet] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -289,6 +291,11 @@ function PayPanel() {
         if (!res.ok) throw new Error(data.message ?? data.error ?? "Session unavailable");
         setDetails(data);
         setStep("confirm");
+        // Learn whether this user has a passkey, to offer it on the pay step.
+        fetch("/api/tappay/pin")
+          .then((r) => r.json())
+          .then((s) => setPasskeySet(Boolean(s.passkey_set)))
+          .catch(() => {});
       } catch (e) {
         setFailMsg((e as Error).message);
         setStep("failed");
@@ -358,6 +365,58 @@ function PayPanel() {
     } catch (e) {
       setFailMsg((e as Error).message);
       setStep("failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function payWithPasskey() {
+    setBusy(true);
+    try {
+      const optRes = await fetch("/api/tappay/webauthn/auth-options");
+      if (!optRes.ok) throw new Error("Passkey unavailable on this account");
+      const optionsJSON = await optRes.json();
+      const assertion = await startAuthentication({ optionsJSON });
+      const res = await fetch("/api/tappay/pay", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, assertion }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setStep("done");
+        return;
+      }
+      setFailMsg(humanError(data));
+      setStep("failed");
+    } catch (e) {
+      setFailMsg((e as Error).message || "Passkey verification failed");
+      setStep("failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function registerPasskey() {
+    setBusy(true);
+    try {
+      const optRes = await fetch("/api/tappay/webauthn/register-options");
+      if (!optRes.ok) throw new Error("Could not start passkey setup");
+      const optionsJSON = await optRes.json();
+      const attestation = await startRegistration({ optionsJSON });
+      const res = await fetch("/api/tappay/webauthn/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(attestation),
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.message ?? d.error ?? "Passkey setup failed");
+      }
+      setPasskeySet(true);
+      success("Passkey enabled — use it next time");
+    } catch (e) {
+      error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -452,6 +511,11 @@ function PayPanel() {
 
       {step === "pin" && (
         <div className="text-center">
+          {passkeySet && (
+            <button className="btn-primary mb-4 w-full" onClick={payWithPasskey} disabled={busy}>
+              {busy ? "Verifying…" : `Pay with Face ID / fingerprint`}
+            </button>
+          )}
           <p className="label">Enter your PIN to pay {details ? naira(details.amount_kobo) : ""}</p>
           <input
             className="input mt-3 text-center tracking-[0.5em]"
@@ -463,9 +527,18 @@ function PayPanel() {
             onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
             autoFocus
           />
-          <button className="btn-primary mt-4 w-full" onClick={pay} disabled={busy}>
-            {busy ? "Paying…" : "Pay"}
+          <button
+            className={(passkeySet ? "btn-secondary" : "btn-primary") + " mt-4 w-full"}
+            onClick={pay}
+            disabled={busy}
+          >
+            {busy ? "Paying…" : "Pay with PIN"}
           </button>
+          {!passkeySet && (
+            <button className="btn-ghost mt-3 text-xs" onClick={registerPasskey} disabled={busy}>
+              Set up a passkey (fingerprint / Face ID) for faster pay
+            </button>
+          )}
         </div>
       )}
 

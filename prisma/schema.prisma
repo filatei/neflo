@@ -582,6 +582,24 @@ enum TapPaySettlement {
   COLLECTION
 }
 
+// A registered WebAuthn passkey (fingerprint / Face ID / security key) a user
+// can use to authorise a TapPay payment instead of the PIN.
+model WebAuthnCredential {
+  id           String   @id @default(cuid())
+  userId       String
+  // base64url credential ID (the authenticator's handle).
+  credentialId String   @unique
+  publicKey    Bytes
+  counter      BigInt   @default(0)
+  transports   String? // comma-separated, e.g. "internal,hybrid"
+  label        String?
+  createdAt    DateTime @default(now())
+  lastUsedAt   DateTime?
+
+  @@index([userId])
+  @@map("webauthn_credentials")
+}
+
 // Immutable audit trail for every TapPay lifecycle event (CBN record requirement).
 model TapPayAudit {
   id          String   @id @default(cuid())

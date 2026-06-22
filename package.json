@@ -20,6 +20,8 @@
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",
     "@prisma/client": "^6.1.0",
+    "@simplewebauthn/browser": "^13.1.0",
+    "@simplewebauthn/server": "^13.1.1",
     "ethers": "^6.13.4",
     "jose": "^5.9.6",
     "jsqr": "^1.4.0",

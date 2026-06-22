@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getCurrentMembership } from "@/lib/merchant";
 import { InsufficientBalanceError } from "@/lib/payout";
 import { verifySessionToken, type SessionTokenClaims } from "@/lib/tappay/token";
 import { verifyPin } from "@/lib/tappay/pin";
+import { verifyAuthentication, WEBAUTHN_AUTH_COOKIE } from "@/lib/tappay/webauthn";
 import { getById, consume, markPaid, markFailed } from "@/lib/tappay/session";
 import { internalTransfer, assertDailyCap } from "@/lib/tappay/collect";
 import { allowPayAttempt, clearPayAttempts, LimitError } from "@/lib/tappay/limits";
@@ -12,14 +14,19 @@ import { audit } from "@/lib/tappay/audit";
 
 export const dynamic = "force-dynamic";
 
+// Authorise with EITHER a transaction PIN OR a WebAuthn passkey assertion.
 // .strict() rejects any extra field — notably a client-supplied `amount`, which
 // must never override the receiver-locked amount (spec §5 "amount locked").
 const schema = z
   .object({
     token: z.string().min(20), // the scanned QR payload (signed JWT)
-    pin: z.string().regex(/^\d{4,6}$/),
+    pin: z.string().regex(/^\d{4,6}$/).optional(),
+    assertion: z.record(z.unknown()).optional(), // WebAuthn AuthenticationResponseJSON
   })
-  .strict();
+  .strict()
+  .refine((d) => Boolean(d.pin) !== Boolean(d.assertion), {
+    message: "Provide exactly one of pin or assertion",
+  });
 
 /** Payer authorises a TapPay session from their Neflo balance (internal path). */
 export async function POST(req: Request) {
@@ -33,7 +40,7 @@ export async function POST(req: Request) {
       { status: 422 },
     );
   }
-  const { token, pin } = parsed.data;
+  const { token } = parsed.data;
   const ip = req.headers.get("x-forwarded-for");
   const userAgent = req.headers.get("user-agent");
 
@@ -64,16 +71,33 @@ export async function POST(req: Request) {
   if (session.merchantId === m.merchant.id)
     return NextResponse.json({ error: "cannot_pay_self" }, { status: 400 });
 
-  // 4. Sender auth — transaction PIN (WebAuthn/passkey is the planned fast-follow).
-  const user = await prisma.user.findUnique({
-    where: { id: m.userId },
-    select: { txnPinHash: true },
-  });
-  if (!user?.txnPinHash)
-    return NextResponse.json({ error: "pin_not_set", message: "Set a TapPay PIN first" }, { status: 400 });
-  if (!(await verifyPin(pin, user.txnPinHash))) {
-    await audit("FAIL", { sessionId, actorId: m.userId, ip, userAgent, meta: { reason: "bad_pin" } });
-    return NextResponse.json({ error: "invalid_pin" }, { status: 401 });
+  // 4. Sender auth — WebAuthn passkey (fingerprint / Face ID) OR transaction PIN.
+  if (parsed.data.assertion) {
+    const jar = await cookies();
+    const challenge = jar.get(WEBAUTHN_AUTH_COOKIE)?.value;
+    jar.delete(WEBAUTHN_AUTH_COOKIE);
+    if (!challenge)
+      return NextResponse.json({ error: "passkey_challenge_missing" }, { status: 400 });
+    const ok = await verifyAuthentication(
+      m.userId,
+      parsed.data.assertion as Parameters<typeof verifyAuthentication>[1],
+      challenge,
+    );
+    if (!ok) {
+      await audit("FAIL", { sessionId, actorId: m.userId, ip, userAgent, meta: { reason: "bad_passkey" } });
+      return NextResponse.json({ error: "invalid_passkey" }, { status: 401 });
+    }
+  } else {
+    const user = await prisma.user.findUnique({
+      where: { id: m.userId },
+      select: { txnPinHash: true },
+    });
+    if (!user?.txnPinHash)
+      return NextResponse.json({ error: "pin_not_set", message: "Set a TapPay PIN first" }, { status: 400 });
+    if (!(await verifyPin(parsed.data.pin!, user.txnPinHash))) {
+      await audit("FAIL", { sessionId, actorId: m.userId, ip, userAgent, meta: { reason: "bad_pin" } });
+      return NextResponse.json({ error: "invalid_pin" }, { status: 401 });
+    }
   }
 
   // 5. Daily cap (rolling 24h) for the payer account.
