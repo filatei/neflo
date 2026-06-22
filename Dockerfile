@@ -4,7 +4,9 @@
 FROM node:20-alpine AS deps
 WORKDIR /app
 RUN apk add --no-cache libc6-compat openssl
-COPY package.json package-lock.json ./
+# .npmrc carries legacy-peer-deps (next-auth's optional @simplewebauthn@9 peer
+# vs our v13) — it must be present for `npm ci` to resolve.
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 # ---------- builder ----------
